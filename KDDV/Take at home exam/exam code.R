@@ -1,11 +1,12 @@
 #import dataset and libraryes
-BankDeposit <- read.csv("~/GitHub/Maastricht/KDDV/Take at home exam/BankDeposit.csv")
+BankDeposit <- read.csv("~/GitHub/Maastricht/KDDV/Take at home exam/BankDeposit.csv", stringsAsFactors=TRUE)
 
 library(tidyverse)
 library(moments)
 library(kableExtra)
 library(outliers)
-
+library(rpart)
+library(caret)
 
 
 
@@ -340,44 +341,132 @@ barplot.norm <- function(data, x) {
 barplot.norm(my_data, previous)
 my_data$previous_binned <- ifelse(my_data$previous > 0, "over_median", "at_or_below_median")
 
-# Now you can view the distribution of the binned variable against the target variable 'y'
-table(my_data$previous_binned, my_data$y)
+# Bin the 'age' variable into three categories
+my_data$age_binned <- ifelse(my_data$age < 25, "young",
+                             ifelse(my_data$age <= 65, "middle aged", "old"))
+
+# Now, you can view the distribution of the binned age variable
+table(my_data$age_binned, my_data$y)
+barplot.norm(my_data, age_binned)
 
 
-barplot.norm(my_data, previous_binned)
 
-my_data$previous_binned <- ifelse(my_data$previous > 0, "over_median", "at_or_below_median")
-table(my_data$previous_binned, my_data$y)
-
-
-barplot.norm(my_data, previous_binned)
-
-barplot.norm(my_data, campaign)
-
-# Assuming 'previous' is a numeric variable in the 'my_data' dataframe indicating the number of contacts
-
-# Create the binned variable with custom labels
-my_data$campaign <- cut(
-  my_data$campaign,
-  breaks = c(-Inf, 0, 2, Inf),  # Define the breaks
-  labels = c("was not contacted", "was contacted less than twice", "was contacted over twice"),
-  include.lowest = TRUE,  # Include the lowest value in the first interval
-  right = FALSE  # This means the intervals are of the form [a, b), which includes 'a' but not 'b'
-)
-
-# Verify the binning by creating a table of the binned variable against the target variable 'y'
-table(my_data$campaign_binned, my_data$y)
-
-barplot.norm(my_data, campaign_binned)
 
 #frequency tables
 
 #interpretation of the resulsts
 
 #training and testing data
+splitIndex <- createDataPartition(my_data_filtered$y, p = 0.7, list = FALSE)
+
+# Creating training and testing datasets
+trainData <- my_data_filtered[splitIndex, ]
+testData <- my_data_filtered[-splitIndex, ]
+
 #validate the split
 
 
 #model 1
 
+
+model <- rpart(y ~ ., data = trainData, method = "class")
+printcp(model)
+rpart.plot(model)
+
+testData$y <- factor(testData$y, levels = levels(predictions))
+
+predictions <- predict(model, testData, type = "class")
+confusionMatrix(predictions, testData$y)
+
+
+
 #model 2
+
+
+sum(is.na(trainData))
+colSums(is.na(trainData))
+
+trainData <- trainData[, !(names(trainData) %in% c("campaign", "campaign_binned"))]
+
+tuned_model <- train(y ~ ., data = trainData, method = "C5.0",
+                     trControl = trainControl(method = "cv", number = 10),
+                     tuneGrid = ctrl)
+plot(tuned_model)
+
+final_c50_model <- tuned_model$finalModel
+
+
+print(final_c50_model$rules)
+
+
+# Predict on the test set
+testData$y <- factor(testData$y, levels = levels(test_predictions))
+
+
+test_predictions <- predict(tuned_model, newdata = testData)
+
+# Confusion Matrix
+confusion <- confusionMatrix(test_predictions, testData$y)
+
+
+# Print the confusion matrix
+print(confusion)
+
+# Print overall accuracy
+cat("Accuracy:", confusion$overall['Accuracy'], "\n")
+
+
+
+
+#model 2 try two
+#code the best pssible c50 model for trainData$yTo code the best possible C5.0 model for your `trainData$y`, we can use the `C5.0()` function from the `C50` package. Here's a sample code to get you started:
+
+library(C50)
+
+trainData$y <- as.factor(trainData$y)
+
+# Train the C5.0 model
+model2 <- C5.0(y ~ ., data = trainData)
+
+summary(model2)
+plot(model2)
+
+# Predict on the test set
+testData$y <- factor(testData$y, levels = levels(test_predictions))
+
+
+test_predictions <- predict(model2, newdata = testData)
+test_predictions
+
+# Confusion Matrix
+confusion <- confusionMatrix(test_predictions, testData$y)
+confusion
+
+
+
+#model 3
+#create a logistic regress# Assuming you have already loaded the necessary packages and have your data in the "trainData" dataframe
+
+# Fit a logistic regression model using the "glm" function
+model3 <- step(glm(y ~ ., data = trainData, family = binomial()))
+
+summary(model3)
+
+
+
+test_predictions <- predict(model3, newdata = testData, type = "response")
+
+test_predictions_binary <- ifelse(test_predictions > 0.5, "yes", "no")
+
+test_predictions_binary <- factor(test_predictions_binary, levels = levels(testData$y))
+confusion_matrix <- confusionMatrix(test_predictions_binary, testData$y)
+
+# Print the confusion matrix
+print(confusion_matrix)
+testData$y
+levels(test_predictions_binary)
+
+
+
+
+# The model can now be used to predict the values of "trainData$y" using new dataion model trying to predict the varible trainData$y. 
