@@ -1,0 +1,439 @@
+#student project m&s 2
+#import data
+pva <- read.delim("C:/Users/edewa/OneDrive/maastricht/year 1/math & statitistic 2/student project/pva.txt")
+
+library(tidyverse)
+
+summary(pva)
+str(pva)
+
+
+# Next, we can use the step() function to perform stepwise regression.
+model <- step(lm(Current.Gift ~ ., data = pva))
+
+# The step() function performs both forward and backward selection to find the best model.
+# The resulting 'model' object will contain the selected variables and their coefficients.
+
+# You can view the final model summary using the summary() function.
+summary(model)
+
+# This will display the coefficient estimates, standard errors, t-values, and p-values for the selected variables.
+
+# Assuming your dataset is loaded into a dataframe called 'data'
+
+# Use the group_by() and summarise() functions to calculate percentages
+result_dplyr <- pva %>%
+  group_by(Own.Home.) %>%
+  summarise(Percentage = n() / nrow(pva) * 100)
+
+# Print the table
+print(result_dplyr)
+
+result_dplyr <- pva %>%
+  group_by(Total.Wealth) %>%
+  summarise(Percentage = n() / nrow(pva) * 100)
+
+# Print the table
+print(result_dplyr)
+
+# Assuming your response variable is 'Current.Gift', you can plot the predicted values against the actual values
+# using the geom_point() and geom_smooth() functions.
+ggplot(data = pva, aes(x = Current.Gift, y = fitted(model))) +
+  geom_point() +  # scatterplot of actual values
+  geom_smooth(method = "lm")  # line plot of predicted values
+
+# This will create a scatterplot of the actual values with a line representing the predicted values from the model.
+
+
+
+
+#lets try and make a nice table for all are varibles using moment
+
+library(moments)
+
+
+# Select the first 13 variables of the 'pva' dataset
+pva_subset <- pva[, sapply(pva, is.numeric)]
+
+
+
+library(moments)
+
+# Assuming 'pva' dataset is loaded
+# Filter only numeric columns for the subset
+pva_subset <- pva[, sapply(pva, is.numeric)]
+
+# Compute the summary statistics
+s.min <- apply(pva_subset, 2, min, na.rm = TRUE)              # minimum
+s.max <- apply(pva_subset, 2, max, na.rm = TRUE)              # maximum
+s.mean <- apply(pva_subset, 2, mean, na.rm = TRUE)             # mean
+s.med <- apply(pva_subset, 2, median, na.rm = TRUE)            # median
+
+# Corrected calculation for lower and upper quartiles
+s.qf <- apply(pva_subset, 2, function(x) quantile(x, 0.25, na.rm = TRUE)[1]) # lower quartile
+s.qt <- apply(pva_subset, 2, function(x) quantile(x, 0.75, na.rm = TRUE)[1]) # upper quartile
+
+s.range <- s.max - s.min                         # range
+s.iqr <- s.qt - s.qf                             # interquartile range
+s.skew <- apply(pva_subset, 2, skewness, na.rm = TRUE)         # skewness
+
+# Finally, create the summary table using the summary statistics calculated above
+summary_table <- data.frame(s.min, s.max, s.mean, s.med, s.qf, s.qt, s.range, s.iqr, s.skew)
+summary_table
+
+
+
+
+# Load the moments package
+library(moments)
+
+# Initiate some empty vectors in which we can contain our descriptive statistics
+s.min = s.max = s.mean = s.med = s.qf = s.qt = s.range = s.iqr = s.skew = c()
+
+
+numeric_dataset <- pva[, sapply(pva, is.numeric)]
+
+# Loop through the columns of the numeric_dataset
+for (i in 1:ncol(numeric_dataset)) {
+  s.min = c(s.min, min(numeric_dataset[, i]))
+  s.max = c(s.max, max(numeric_dataset[, i]))
+  s.range = c(s.range, s.max[i] - s.min[i])
+  s.mean = c(s.mean, mean(numeric_dataset[, i]))
+  s.med = c(s.med, median(numeric_dataset[, i]))
+  s.qf = c(s.qf, quantile(numeric_dataset[, i], 0.25))
+  s.qt = c(s.qt, quantile(numeric_dataset[, i], 0.75))
+  s.iqr = c(s.iqr, IQR(numeric_dataset[, i]))
+  s.skew = c(s.skew, skewness(numeric_dataset[, i]))
+}
+
+# Combine the vectors of descriptive statistics 
+pva.stats = rbind.data.frame(s.min, s.max, s.mean, s.med, s.qf, s.qt, s.range, s.iqr, s.skew)
+# Insert the row names
+rownames(pva.stats) = c("Minimum", "Maximum", "Mean", "Median", "1st Quartile", "3rd Quartile", "Range", "IQR", "Skewness")
+# Insert the same column names from the data frame
+colnames(pva.stats) = colnames(numeric_dataset)
+
+# Display the table
+library(kableExtra)
+pva.stats %>% kbl() %>% kable_minimal()
+
+
+#create boxplots for each varibles
+#addapt all this to the pva dataset instead the swiss dataset
+
+#generate the same plot but for different variables using ggplot2 by transfroming the numeric varibles in to long fromat
+#the varibles concerend are : Age	Num.Children	Income	Total.Wealth	Other.Gifts	Number.of.Gifts	Smallest.Gift	Largest.Gift	Previous.Gift	Time.Between.Gifts	Average.Gift	Current.Gift	Sqrt.Smallest.Gift	Sqrt.Largest.Gift	Sqrt.Previous.Gift	Sqrt.Average.Gift	Sqrt.Current.Gift
+#create boxplots for all these aribles
+
+
+
+
+# Load necessary libraries
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Assuming 'pva' is your dataset
+# Transforming dataset to long format
+pva_long = pva %>%
+  pivot_longer(cols = c(Age, Num.Children, Income, Total.Wealth, Other.Gifts, 
+                        Number.of.Gifts, Time.Between.Gifts, Sqrt.Smallest.Gift, 
+                        Sqrt.Largest.Gift, Sqrt.Previous.Gift, Sqrt.Average.Gift, 
+                        Sqrt.Current.Gift),
+               names_to = "variable", 
+               values_to = "value")
+# Creating boxplots for each variable
+ggplot(pva_long, aes(x = variable, y = value, fill = variable)) +
+  geom_boxplot() +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1), 
+        legend.position = "none") +
+  labs(x = "Variables", y = "Values", title = "Boxplots of Various Variables")
+
+
+# Creating histograms for each variable
+ggplot(pva_long, aes(x = value, fill = variable)) +
+  geom_histogram(bins = 30, alpha = 0.7) +
+  facet_wrap(~variable, scales = "free_x") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1), 
+        legend.position = "none") +
+  labs(x = "Values", y = "Frequency", title = "Histograms of Various Variables") +
+  ylim(0, 3000) 
+
+
+
+#corrlation matrice
+
+# Load the 'corrplot' and 'ggcorrplot' libraries
+library(corrplot)
+library(ggcorrplot)
+
+# Define a vector 'con' containing the names of variables we want to analyze
+con = c("Age", "Num.Children", "Income", "Total.Wealth", "Other.Gifts",
+        "Number.of.Gifts", "Time.Between.Gifts", "Sqrt.Smallest.Gift",
+        "Sqrt.Largest.Gift", "Sqrt.Previous.Gift", "Sqrt.Average.Gift",
+        "Sqrt.Current.Gift")
+
+# Calculate the correlation matrix of the selected variables using the 'cor' function 
+# and assign it to the variable 'corr'
+corr = cor(pva[, con])
+
+# Print the correlation matrix
+corr
+
+# Assuming 'pva' is your dataframe and 'con' contains the names of the continuous variables
+pairs(pva[, con], main = "Scatterplot Matrix")
+ggpairs(pva[, con])
+
+
+#normality test
+install.packages("ggpubr")
+library(ggpubr)
+pva_long = pva %>%
+  pivot_longer(cols = c(Age, Num.Children, Income, Total.Wealth, Other.Gifts, 
+                        Number.of.Gifts, Time.Between.Gifts, Sqrt.Smallest.Gift, 
+                        Sqrt.Largest.Gift, Sqrt.Previous.Gift, Sqrt.Average.Gift, 
+                        Sqrt.Current.Gift),
+               names_to = "variable", 
+               values_to = "percentages")
+
+ggqqplot(pva_long, x = "percentages", facet.by = "variable", color = "variable", scales = "free") +
+  theme(legend.position = "none")
+
+
+#finding outliers
+install.packages("outliers")
+library(outliers)
+install.packages("DescTools")
+library(DescTools)
+
+find_extreme_outliers <- function(x) {
+  q1 <- quantile(x, 0.25, na.rm = TRUE)
+  q3 <- quantile(x, 0.75, na.rm = TRUE)
+  iqr <- q3 - q1
+  lower_bound <- q1 - 3 * iqr
+  upper_bound <- q3 + 3 * iqr
+  x < lower_bound | x > upper_bound
+}
+outlier_check <- sapply(pva[, c("Age", "Num.Children", "Income", "Total.Wealth", "Other.Gifts", 
+                                 "Number.of.Gifts", "Time.Between.Gifts", "Sqrt.Smallest.Gift", 
+                                 "Sqrt.Largest.Gift", "Sqrt.Previous.Gift", "Sqrt.Average.Gift", 
+                                 "Sqrt.Current.Gift")], 
+                         find_extreme_outliers)
+outlier_check
+
+outlier_indices <- apply(outlier_check, 2, which)
+outlier_values <- lapply(seq_along(outlier_indices), function(i) {
+  column_data <- pva[, names(outlier_indices)[i]]
+  outliers_in_column <- column_data[outlier_indices[[i]]]
+  return(outliers_in_column)
+})
+names(outlier_values) <- names(outlier_indices)
+
+
+for (col_name in names(outlier_values)) {
+  cat("Outliers in", col_name, ":\n")
+
+  cat("Number of outliers in", col_name, ":", length(outlier_values[[col_name]]), "\n\n")
+}
+
+#let's create a subdataset and see if it performs better latter on when we will be creating regression models.
+
+# Assuming outlier_check is the matrix with TRUE/FALSE values for outliers
+row_has_outlier <- apply(outlier_check, 1, any)
+pva_no_outliers <- pva[!row_has_outlier, ]
+view(pva_no_outliers)
+
+
+#model making
+ #creation of hold out data
+# Load the caret package
+install.packages("caret")
+library(caret)
+
+# Assuming pva is your dataset and it has a variable 'outcome' for stratification
+
+set.seed(16)  # Setting a seed for reproducibility
+splitIndex <- createDataPartition(pva$Current.Gift, p = 0.7, list = FALSE)
+
+# Creating training and testing datasets
+trainingSet_no_outliers <- pva_no_outliers[splitIndex, ]
+testingSet_no_outliers <- pva_no_outliers[-splitIndex, ]
+
+
+trainingSet <- pva[splitIndex, ]
+testingSet <- pva[-splitIndex, ]
+
+
+#selecting varibles
+
+varibles <-c("Age", "Own.Home.", "Num.Children", "Income", "Sex",               
+"Total.Wealth", "Other.Gifts", "Number.of.Gifts", "Time.Between.Gifts", "Sqrt.Smallest.Gift",
+"Sqrt.Largest.Gift")
+
+pva$Sex <- factor(pva$Sex, levels = c("F", "M"))
+pva$Own.Home. <- factor(pva$Own.Home., levels = c("H", "U"))
+
+trainingSet$Sex <- factor(trainingSet$Sex, levels = c("F", "M"))
+trainingSet$Own.Home. <- factor(trainingSet$Own.Home., levels = c("H", "U"))
+
+trainingSet_no_outliers$Sex <- factor(trainingSet_no_outliers$Sex, levels = c("F", "M"))
+trainingSet_no_outliers$Own.Home. <- factor(trainingSet_no_outliers$Own.Home., levels = c("H", "U"))
+
+model1 <- lm(Current.Gift ~ Age + Own.Home. + Num.Children + Income + Sex + Total.Wealth + Other.Gifts + Number.of.Gifts + Time.Between.Gifts + Sqrt.Smallest.Gift + Sqrt.Largest.Gift, data = trainingSet)
+summary(model1)
+
+library(car)
+# Plot for each predictor variable
+par(mfrow = c(3, 4))  # Adjust the grid dimensions based on the number of predictors
+for (var in names(trainingSet)[-which(names(trainingSet) == "Current.Gift")]) {
+  avPlots(model1, var)
+}
+
+# Assuming importance_values and variable_names are defined as before
+barplot(importance_values, names.arg = variable_names, col = "blue", main = "Variable Importance in Model 1", las = 2, cex.names = 0.7)
+
+# Adjusting margins if necessary (you can change the values as needed)
+par(mar = c(5, 4, 4, 2) + 0.3)
+
+
+library(relaimpo)
+#library(relaimpo)
+rel_importance <- calc.relimp(model1, type = "lmg", boot = TRUE)
+importance_values <- rel_importance$lmg
+# Extract variable names
+variable_names <- names(importance_values)
+
+# Create a bar plot
+barplot(importance_values, names.arg = variable_names, col = "blue", main = "Variable Importance in Model 1")
+
+
+#1. Residuals vs. Fitted Values Plot: 
+plot(model1, which = 1)
+
+
+#2. Normal Q-Q Plot
+plot(model1, which = 2)
+```
+
+#3. Scale-Location Plot: 
+plot(model1, which = 3)
+
+
+#4. Cook's Distance Plot
+plot(model1, which = 4)
+
+
+
+model2 <- lm(Current.Gift ~ Age + Own.Home. + Num.Children + Income + Sex + Total.Wealth + Other.Gifts + Number.of.Gifts + Time.Between.Gifts + Sqrt.Smallest.Gift + Sqrt.Largest.Gift, data = trainingSet)
+summary(model2)
+
+model3 <- step(lm(Current.Gift ~ ., data = trainingSet))
+summary(model3)
+
+model4 <- step(lm(Current.Gift ~ ., data = trainingSet_no_outliers))
+summary(model4)
+
+model5 <- lm(Current.Gift ~   Num.Children + Income + Sqrt.Smallest.Gift + Sqrt.Largest.Gift, data = trainingSet)
+summary(model5)
+
+model6 <- lm(Current.Gift ~ Other.Gifts + Time.Between.Gifts + Num.Children + Income + Sqrt.Smallest.Gift + Sqrt.Largest.Gift, data = trainingSet)
+summary(model6)
+formula(model6)
+
+model7 <- step(lm(Current.Gift ~ Age + Own.Home. + Num.Children + Income + Sex + Total.Wealth + Other.Gifts + Number.of.Gifts + Time.Between.Gifts + Sqrt.Smallest.Gift + Sqrt.Largest.Gift, data = trainingSet))
+summary(model7)
+
+
+model8 <- lm(Current.Gift ~  Sqrt.Smallest.Gift + Sqrt.Largest.Gift, data = trainingSet)
+summary(model8)
+
+
+# Assuming your response variable is 'Current.Gift', you can plot the predicted values against the actual values
+# using the geom_point() and geom_smooth() functions.
+ggplot(data = trainingSet, aes(x = Current.Gift, y = fitted(model6))) +
+  geom_point() +  # scatterplot of actual values
+  geom_smooth(method = "lm")  # line plot of predicted values
+
+#testing models
+library(yardstick)
+
+predictions <- predict(model6, newdata = testingSet)
+testingSet$predictions <- predictions
+testingSet$predictions
+head(testingSet)
+
+# Assuming 'Current.Gift' is the target variable in your testing set
+results <- data.frame(Actual = testingSet$Current.Gift, Predicted = predictions)
+
+rmse_result <- rmse(results, Actual, Predicted)
+mae_result <- mae(results, Actual, Predicted)
+rsq_result <- rsq(results, Actual, Predicted)
+
+print(rmse_result)
+print(mae_result)
+print(rsq_result)
+
+
+# Generate predictions on the testing set
+predictions <- predict(model6, newdata = testingSet)
+
+
+# Calculate performance metrics
+mse <- mean((testingSet$Current.Gift - predictions)^2)
+rmse <- sqrt(mse)
+mae <- mean(abs(testingSet$Current.Gift - predictions))
+
+# Print the metrics
+cat("MSE:", mse, "\n")
+cat("RMSE:", rmse, "\n")
+cat("MAE:", mae, "\n")
+
+# Predictions on the testing set
+predictions_model2 <- predict(model2, newdata = testingSet)
+predictions_model6 <- predict(model6, newdata = testingSet)
+
+# Calculate R-squared for the hold-out data
+SSE <- sum((predictions - testingSet$Current.Gift)^2)
+SST <- sum((mean(trainingSet$Current.Gift) - testingSet$Current.Gift)^2)
+R_squared_holdout <- 1 - (SSE/SST)
+
+# Print the R-squared value
+cat("Hold-out R-squared:", R_squared_holdout, "\n")
+
+
+
+# Assuming model6 is the simpler model and model2 is the more complex one
+anova(model6, model2)
+
+
+
+
+library(ggplot2)
+
+
+p1 <- ggplot(testingSet, aes(x = Current.Gift , y = predictions_model2)) +
+  geom_point() +  # This adds the scatterplot points
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +  # This adds the y=x line
+  labs(x = "Actual Values", y = "Predicted Values") +
+  ggtitle("Scatterplot of Actual vs. Predicted Values Model I") +
+  theme_minimal()  # Optional: adds a minimalistic theme
+
+# Print the scatterplot
+
+p2 <- ggplot(testingSet, aes(x = Current.Gift , y = predictions_model6)) +
+    geom_point() +  # This adds the scatterplot points
+    geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +  # This adds the y=x line
+    labs(x = "Actual Values", y = "Predicted Values") +
+    ggtitle("Scatterplot of Actual vs. Predicted Values Model II") +
+    theme_minimal()  # Optional: adds a minimalistic theme
+
+graph.this <- (p1) / (p2)
+graph.this
+
+f
+# Evaluate the model
+postResample(pred = knnPredictions, obs = testingSet$Current.Gift)
+
+#it's shit.

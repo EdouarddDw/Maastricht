@@ -1,30 +1,550 @@
 ---
-title: "Take at home exam"
+title: "Take At Home Exam"
 author: "Edouard Dewaerheijd (I6341571)"
-date: "2023-12-17"
-output: html_document
+date: "2023-12-19"
+output: rmdformats::downcute
 ---
+# Introduction
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+# Importing the dataset and librabies
+We first started by importing the BankDeposit.cvs dataset and adding necessary packages for later analyses.
+```{r, error=FALSE, warning=FALSE, message=FALSE}
+BankDeposit <- read.csv("~/GitHub/Maastricht/KDDV/Take at home exam/BankDeposit.csv", stringsAsFactors=TRUE)
+
+library(tidyverse)
+library(moments)
+library(kableExtra)
+library(ggcorrplot)
+library(rpart)
+library(rpart.plot)
+library(C50)
+library(class)
+library(outliers)
+library(caret)
 ```
 
-## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+# Creation of a random subset
+A random subset of 5000 observations was generated from the "BankDeposit" dataset. The seed was set to ensure reproducibility.
+```{r}
+set.seed(16)
+my_data <- BankDeposit[sample(nrow(BankDeposit), size = 5000),]
 ```
 
-## Including Plots
+# The Data
+before any further analysis let's look through our variables and undersatnd them using the head function in R.
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+head(my_data)
+cat("numerical varibles : Age, Balance, Day, duration, campaign, pdays, previous)
+")
+cat("categorical varibles : job,Marital, Education, Default, Housing, Loan, Contact, month, poutcome, y")
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+We also created a small summary table for all the numerical variables :
+```{r}
+numeric_data <- select_if(my_data, is.numeric)
+
+#used "num_cols" to fidure out how big I needed my for loop to be
+#num_cols <- ncol(numeric_data)
+#num_cols
+
+
+# initiate some empty vectors in which we can contain our descriptive statistics
+s.min = s.max = s.mean = s.med = s.qf = s.qt = s.range = s.iqr = s.skew = c()
+
+# Create a for loop in which it calculates all of the different statistics we are interested in
+for (i in 1:7) {
+  s.min = c(s.min, min(numeric_data[,i]))
+  s.max = c(s.max, max(numeric_data[,i]))
+  s.range = c(s.range, s.max[i]-s.min[i])
+  s.mean = c(s.mean, mean(numeric_data[,i]))
+  s.med = c(s.med, median(numeric_data[,i]))
+  s.qf = c(s.qf, quantile(numeric_data[,i],0.25))
+  s.qt = c(s.qt, quantile(numeric_data[,i],0.75))
+  s.iqr = c(s.iqr, IQR(numeric_data[,i]))
+  s.skew = c(s.skew, skewness(numeric_data[,i]))
+}
+
+# Combine the vectors of descriptive statistics 
+stats = rbind.data.frame(s.min, s.max, s.mean, s.med, s.qf, s.qt, s.range, s.iqr,s.skew)
+# Insert the row names
+rownames(stats) = c("Minimum", "Maximum", "Mean", "Median", "1st Quartile", "3rd Quartile", "Range", "IQR","Skewness")
+# Insert the same column names from the data frame
+colnames(stats) = colnames(numeric_data)
+
+# Display the table
+stats %>% kbl() %>% kable_minimal()
+```
+This table let's us see the minimum, maximum, mean, distribution and much more in one glips.
+
+#Generic graphs
+
+## Normal Probability plot
+```{r}
+numeric_data_long <- pivot_longer(numeric_data, cols = everything(), names_to = "variable", values_to = "values")
+
+numeric_data_long %>%
+  ggplot(aes(sample = values, color = variable)) +
+  stat_qq() +
+  stat_qq_line(col = "black") +
+  facet_wrap(~ variable, ncol = 2, scales = "free") +
+  labs(x = "Theoretical Quantiles", y = "Sample Quantiles") +
+  ggtitle("Normal Probability Plots") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+
+Normal probability plots, also known as QQ plots, allow us to assess visually if the numerical variables in our dataset are normally distributed. The closer the points on the plot are to the diagonal black line, the more the variable is normally distributed.
+From the QQ plot, we can observe that the variable "Age" is fairly normally distributed. However, the variables "Duration", "Previous", "Balance", "Campaign", and "Pdays" appear to be skewed (which aligns with the information provided in the summary table above).
+In conclusion, apart from "Age", our variables are not normally distributed and exhibit skewness.
+
+## Boxplots
+```{r}
+numeric_data_long <- pivot_longer(numeric_data, cols = everything(), names_to = "variable", values_to = "percentages")
+
+
+numeric_data_long %>% ggplot(aes(y=percentages,x=variable,color=variable)) +
+  stat_boxplot(geom ='errorbar') + 
+  geom_boxplot() +
+  labs(x = "Variables", y = "Percentages") +
+  ggtitle("Box Plots") + theme_minimal() + theme(legend.position = "none") +
+  coord_cartesian(ylim = c(0,10000))
+
+```
+
+Boxplots allow me to further visualize the distribution of each variable. These graphs further confirm that most of the variables are skewed. Furthermore, these graphs show me the distribution, and each little dot above a variable indicates a potential outlier. In the next part of the paper, we will check for outliers mathematically and examine a couple of individual boxplots with noticeable outliers.
+
+# Outliers
+## mathematicaly
+I used two diffrent methodes to find outliers. firstly I used the Z-score mthode and secondly I used the IQR methode.
+### Z-score methode
+```{r}
+zscores = sapply(numeric_data[,1:7],FUN = scale)
+outliers <-which(zscores > 3 | zscores < -3, arr.ind = T)
+str(outliers)
+#568 outliers using the Z score
+```
+Using the Z-score method, we found 568 outliers. However, this method assumes that the data follows a normal distribution, and since our data doesn't strictly follow a normal distribution,
+this may not be the most effective method to identify outliers.
+## IQR methode
+
+```{r}
+#IQR method
+outlier_check <- sapply(numeric_data, outlier)
+outlier_check
+```
+
+Using the IQR method, we found a lot of outliers, especially for the balance and duration variables. This is normal because both of these variables are heavily skewed.
+
+## Graphs That Stand Out
+
+### Balance
+```{r}
+p <- ggplot(numeric_data, aes(x = factor(1), y = balance)) +
+  geom_boxplot() +
+  ggtitle("Boxplot of balance") +
+  labs(x = "", y = "balance") 
+#find three points 
+top_outliers <- numeric_data$balance %>% 
+  sort(decreasing = TRUE) %>% 
+  head(3)
+
+# Add red points for the top three outliers
+p <- p + geom_point(data = numeric_data %>% filter(balance %in% top_outliers),
+                    aes(x = factor(1), y = balance), 
+                    color = "red")
+#lables
+p <- p + geom_text(data = numeric_data %>% filter(balance %in% top_outliers),
+                   aes(x = factor(1), y = balance, label = balance), 
+                   vjust = -1, size = 3, hjust = 0.5)
+p
+
+```
+
+It is observable that the 'Balance' dataset contains data points that may be classified as potential outliers. A majority of these points, upon closer examination, are not genuine outliers; they are perceived as such due to the skewness of the distribution. Nevertheless, three distinct data points, over 30,000, heavily deviate from the overall distribution. These points have been colored in red and annotated with their row numbers for easy identification. They are categorized as extreme outliers and will be excluded from the dataset for the modeling phase, as their presence could impact the accuracy of future models.
+
+### Duration
+```{r}
+p <- ggplot(numeric_data, aes(x = factor(1), y = duration)) +
+  geom_boxplot() +
+  ggtitle("Boxplot of duration") +
+  labs(x = "", y = "Duration")  
+
+top_outliers <- numeric_data$duration %>%
+  sort(decreasing = TRUE) %>%
+  head(7)
+p <- p + geom_point(data = numeric_data %>% filter(duration %in% top_outliers),
+                    aes(x = factor(1), y = duration),
+                    color = "red")
+
+p <- p + geom_text(data = numeric_data %>% filter(duration %in% top_outliers),
+                   aes(x = factor(1), y = duration, label = duration),
+                   vjust = -0.25, size = 3, hjust = 1)
+p
+```
+Our analysis shows that a considerable number of data points are initially considered potential outliers, primarily due to the skewed distribution of the variable. The final seven data points diverge from the core distribution, qualifying them as outliers. These specific data points have been highlighted in red, and their corresponding row numbers have been indicated. These data points have been removed from the dataset to make future models more accurate.
+
+## Conclusion
+Outliers within the dataset were identified by employing various techniques. We have decided not to take any action against the outliers found through the mathematical methods. This is because most of these outliers represent valid data points within skewed variables; their exclusion would result in significant information loss. However, we will remove the ten outliers identified by visualizing boxplots for the variables 'Balance' and 'Duration.' This selective elimination aims to make the dataset more generalizable and thus more suitable for modeling.
+
+**getting read of the outliers metioned above from the dataset:**
+```{r}
+#getting rid of the outliers
+
+balance_outliers <- my_data$balance %>% 
+  sort(decreasing = TRUE) %>% 
+  head(3)
+
+duration_outliers <- my_data$duration %>%
+  sort(decreasing = TRUE) %>%
+  head(6)
+
+my_data_filtered <- my_data %>% 
+  filter(!(balance %in% balance_outliers))
+
+my_data_filtered <- my_data_filtered %>% 
+  filter(!(duration %in% duration_outliers))
+```
+
+
+# Finding Relationships In The Data
+## Categorical
+### Month
+```{r}
+my_data %>% ggplot() + 
+  geom_bar(aes(month,fill=y),position="fill") +
+  scale_x_discrete( "month" ) + 
+  scale_y_continuous( "Percent" ) + 
+  guides(fill = guide_legend( title = "subscribed a term deposit?" ) ) + 
+  scale_fill_manual( values = c( "tomato", "skyblue3" ) )
+```
+This graph shows the proportion of yes and no of our target variable depending on the month of the last contact. Certain months have a higher proportion of subscriptions than others. In this case, we can see that December, March, October, and September have a higher proportion of "yes" than other months.
+We can check for exact percentages for each month using a frequency table and a percentage table:
+```{r}
+contingency_table <- table(my_data$y, my_data$month)
+count_table <- table(my_data$month, my_data$y)
+prop_table <- prop.table(count_table, margin = 1) * 100
+
+cat("contingency table")
+contingency_table
+cat("percentage table")
+prop_table
+
+```
+As expected, we can see that the proportion of people saying yes in December, March, October, and September are all over 70% and significantly higher than all the other months. It is also important to note that there are considerably fewer observations in these months (around 100 each) compared to others like May, with over 12 000 observations.
+
+
+### Poutcome
+```{r}
+my_data %>% ggplot() + 
+  geom_bar(aes(poutcome,fill=y),position="fill") +
+  scale_x_discrete( "poutcome" ) + 
+  scale_y_continuous( "Percent" ) + 
+  guides(fill = guide_legend( title = "subscribed a term deposit?" ) ) + 
+  scale_fill_manual( values = c( "tomato", "skyblue3" ) )
+
+```
+In this graph, we can see the proportion of people subscribing to a term deposit is significantly higher if the outcome of the previous marketing campaign was effective on the potential client.
+We also created a contingency table to see the exact proportions.
+```{r}
+contingency_table <- table(my_data$y, my_data$poutcome)
+count_table <- table(my_data$poutcome, my_data$y)
+prop_table <- prop.table(count_table, margin = 1) * 100
+
+cat("contingency table")
+contingency_table
+cat("percentage table")
+prop_table
+```
+Indeed, 87% of people who responded positively to our target variable are from previous marketing campaigns in the 'success' category, indicating their effectiveness. However, it is important to note that most observations of this variable are 'unknown' (almost 4000 observations), which could affect the analysis.
+
+## Numerical varibles
+For numerical variables, we will start by creating proportion histograms like with the categorical variables, but we will also try to bin each of these variables to learn more and make our analysis more accessible.
+
+### Privious
+```{r}
+barplot.norm <- function(data, x) {
+  variable_name <- deparse(substitute(x))
+  graph_title <- paste("subscribed a term deposit Distribution by", variable_name)
+  ggplot(data, aes_string(x = variable_name, fill = "y")) +
+    geom_bar(position = "fill") +
+    labs(title = graph_title,
+         x = variable_name,
+         y = "Percentage") +
+    theme_minimal() +
+    scale_fill_brewer(palette = "Set1")
+}
+barplot.norm(my_data, previous)
+```
+We can tell that the number of contacts performed before this campaign impacts the potential client's response to the target variable. We can see that over 15 previous contacts, the answer to the target variable is always no. Let's try and bin this variable.
+I decided to bin the variable into two groups, over and under or equal to the median and over the median. The median is 0.
+```{r}
+my_data$previous_binned <- ifelse(my_data$previous > 0, "over_median", "at_or_below_median")
+table(my_data$previous_binned, my_data$y)
+
+
+barplot.norm(my_data, previous_binned)
+
+```
+We can see a higher proportion of positive responses to our target variable when there was contact in a previous campaign(s).
+
+
+### Age
+
+```{r}
+barplot.norm(my_data, age)
+```
+Let's divide this variable into three subgroups: young (under 25), middle-aged (working adults from 25 to 65), and old (over 65  and customarily retired).
+
+```{r}
+my_data$age_binned <- ifelse(my_data$age < 25, "young",
+                             ifelse(my_data$age <= 65, "middle aged", "old"))
+
+table(my_data$age_binned, my_data$y)
+barplot.norm(my_data, age_binned)
+
+```
+
+We can see that the subgroups "old" and "young" proportionally have higher rates of positive answers to our target variable.
+
+# Correlation Testing
+```{r}
+
+corr = cor(numeric_data)
+corr
+ggcorrplot(corr, method = "circle")
+```
+After creating a correlation table and a graphical correlation matrix, we can establish that most variables in this dataset are not correlated, except the variables "previous' and pdays" that are slightly correlated (56% correlated). None of these variables exhibit a sufficient level of correlation to warrant further consideration in the modeling process.
+
+# Data Splitting
+```{r}
+#training and testing data
+splitIndex <- createDataPartition(my_data_filtered$y, p = 0.7, list = FALSE)
+
+# Creating training and testing datasets
+trainData <- my_data_filtered[splitIndex, ]
+testData <- my_data_filtered[-splitIndex, ]
+```
+
+We split the data into a training set, comprising 80% of the data, and a testing set, making up the remaining 20%. This division is crucial for several reasons. Firstly, the training set is used to build and train the model, allowing it to learn the underlying patterns in the data. Secondly, the testing set, which the model has yet to see during training, is used to evaluate the model's performance. This approach helps assess the model for overfitting, ensuring it generalizes well to new data. 
+
+## Validating the data split
+for the following variables (these are the variables we will be using the most in the model-making part), we will be checking if the split is correctly effectuated or if there is a significant difference in distribution between the training and the testing data.
+
+### y (target varible)
+```{r}
+
+success_train <- sum(trainData$y == "yes")
+success_test <- sum(testData$y == "yes")    
+# Total observations in both datasets
+n_train <- nrow(trainData)
+n_test <- nrow(testData)
+
+# Calculate the proportions
+p_train <- success_train / n_train
+p_test <- success_test / n_test
+
+# Pooled proportion
+p_pooled <- (success_train + success_test) / (n_train + n_test)
+
+# Z-test calculation
+z_score <- (p_train - p_test) / sqrt(p_pooled * (1 - p_pooled) * (1/n_train + 1/n_test))
+p_value <- 2 * pnorm(-abs(z_score))  # Two-tailed test
+
+# Output the results
+list(z_score = z_score, p_value = p_value)
+
+```
+The P-value is 0.995. This means we do not have enough evidence to reject the null hypothesis. Thus, we can not conclude that there is a true difference in proportion in the train and test sub-datasets.
+### pourcome
+```{r}
+length(trainData$y)
+length(testData$y)
+length(trainData$y[trainData$y == "yes"])
+length(testData$y[testData$y == "yes"])
+
+prop.test( x = c(1099,471) , n=  c(3494,1497), alternative = "two.sided", correct = FALSE)
+```
+The P-value is 0.995. This means we do not have enough evidence to reject the null hypothesis. Thus, we can not conclude that there is a true difference in proportion in the train and test sub-datasets.
+
+### Age
+```{r}
+t.test(trainData$age, testData$age)
+```
+The P-value is 0.598. This means we do not have enough evidence to reject the null hypothesis. Thus, we can not conclude that there is a true difference in proportion in the train and test sub-datasets.
+### Duration
+
+```{r}
+t.test(trainData$duration, testData$duration)
+```
+The P-value is 0.3491 This means we do not have enough evidence to reject the null hypothesis. Thus, we can not conclude that there is a true difference in proportion in the train and test sub-datasets.
+
+
+# Model bulding
+
+## Cart Tree
+```{r}
+model <- rpart(y ~ ., data = trainData, method = "class")
+printcp(model)
+rpart.plot(model)
+
+predictions <- predict(model, testData, type = "class")
+
+cm_cart <- confusionMatrix(predictions, testData$y)
+cm_cart
+```
+
+Our first model is a classification tree, more precisely a Cart Tree. This model used five variables and has eight splits. It has an accuracy on the holdout data of 81.23% with a kappa value of 60.26%. It also has a balanced accuracy of around 80%.the hold out data of 81.23% with a kappa value of 60.26%. the Balanced acuaracy of around 80%.
+
+## C50
+```{r}
+trainData$y <- as.factor(trainData$y)
+
+model2 <- C5.0(y ~ ., data = trainData)
+
+summary(model2)
+plot(model2)
+
+#testData$y <- factor(testData$y, levels = levels(test_predictions))
+
+
+test_predictions <- predict(model2, newdata = testData)
+
+c50_cm <- confusionMatrix(test_predictions, testData$y)
+c50_cm
+
+```
+We decided to make a second classification tree model, this time using C50, to see which one performed the best. This model performed well on the hold-out data with an accuracy of 84.57% and a kappa of 0.6297. the balanced accuracy for this model is 82.43%, which is slightly better than the Cart tree model.
+
+## Logistic Regression
+
+```{r}
+model3 <- step(glm(y ~ ., data = trainData, family = binomial()))
+
+summary(model3)
+
+#test on hold out data
+test_predictions <- predict(model3, newdata = testData, type = "response")
+
+test_predictions_binary <- ifelse(test_predictions > 0.5, "yes", "no")
+
+test_predictions_binary <- factor(test_predictions_binary, levels = levels(testData$y))
+glm_cm <- confusionMatrix(test_predictions_binary, testData$y)
+
+glm_cm
+```
+The next model we created was a logistic regression model using stepwise to find the model that keeps only variables that are significant to the model. This model uses 36 variables but only uses 10 variables from the dataset; the categorical variables with multiple groups are separated into flag variables for each subgroup, which explains the large number of variables. The model ended up with an actuality of 83.03% against the hold-out data. It has a Kappa of 58.76 and a balanced accuracy of 78.03%.
+
+### KNN
+
+```{r}
+
+# Normalize continuous variables
+normalized_trainData <- trainData
+normalized_trainData$age <- scale(trainData$age)
+normalized_trainData$duration <- scale(trainData$duration)
+
+# Convert categorical variables to dummy variables
+dummies <- model.matrix(~ month + poutcome - 1, data = trainData)
+normalized_trainData <- cbind(normalized_trainData[, c("age", "duration")], dummies)
+
+
+predictors <- normalized_trainData
+response <- trainData$y
+
+k_values <- expand.grid(k = 1:20)
+train_control <- trainControl(method = "cv", number = 10)
+
+knn_model <- train(x = predictors, y = response, method = "knn", tuneGrid = k_values, trControl = train_control)
+
+plot(knn_model)
+
+```
+
+The model is a k-nearest neighbor model. Before creating the model, we normalized the numerical variables using the range function and individually binned the categorical variables. We did so because kNN is based on distance calculations; normalizing the variables ensures that all variables have the same range of distances. We used four different variables for this model. We created a graph that represents the model's accuracy based on the different values of k. Accuracy generally improves with higher k values until around 15. It is essential to remember that higher k values can cause overfitting.
+
+```{r}
+# Normalize continuous variables in testData
+testData$age <- scale(testData$age)
+testData$duration <- scale(testData$duration)
+
+# Create dummy variables for categorical variables in testData
+dummies_test <- model.matrix(~ month + poutcome - 1, data = testData)
+testData_prepared <- cbind(testData[, c("age", "duration")], dummies_test)
+#test on hold out data
+test_predictions <- predict(knn_model, newdata =  testData_prepared)
+
+knn_cm <- confusionMatrix(test_predictions, testData$y)
+knn_cm
+```
+The K nearest neighbor model has an accuracy of 81.83%, a kappa of 0.5637, and a balanced accuracy of 77.21%.
+
+
+# model comparaison
+```{r}
+# Assuming cm_cart, c50_cm, glm_cm, and knn_cm are your confusion matrix objects for each model
+accuracy_cart <- cm_cart$overall['Accuracy']
+accuracy_c50 <- c50_cm$overall['Accuracy']
+accuracy_logistic <- glm_cm$overall['Accuracy']
+accuracy_knn <- knn_cm$overall['Accuracy']
+
+# Combine into a data frame
+model_comparisons <- data.frame(
+  Model = c("CART", "C50", "Logistic Regression", "KNN"),
+  Accuracy = c(accuracy_cart, accuracy_c50, accuracy_logistic, accuracy_knn)
+)
+
+ggplot(model_comparisons, aes(x = Model, y = Accuracy)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_text(aes(label = sprintf("%.2f", Accuracy)), 
+            position = position_dodge(width = 0.9), vjust = -0.3) +
+  theme_minimal() +
+  labs(title = "Model Comparison Based on Accuracy",
+       x = "Model",
+       y = "Accuracy")
+
+
+```
+All our models performed relatively similarly. C50 is the most accurate model, with an accuracy rate of 0.85. if we look at adjusted accuracy rates, we can see that C50 outperforms the Cart model by over 5%. Logistic regression and KNN performed remarkably similarly, with a difference in balanced performance of less than 1%.
+
+# Conclusion
+
+We started by conducting an exploratory data analysis to understand the dataset. Then, we modeled the data to predict whether a client would subscribe to a term deposit. We analyzed 17 independent variables and one target variable.
+
+During the exploratory data analysis, we examined each variable and found that the variables "boutcome", "age", "month", and "duration" showed a correlation with our target variable. We also checked for missing data and identified any extreme outliers.
+
+For the modeling phase, we created four models: CART decision tree, C5.0 decision tree, k-nearest neighbor model, and logistic regression model.
+
+In conclusion, all our models performed similarly. However, if we had to choose only one model, we would select the C5.0 decision tree as it outperformed the other three models by a 3 to 4 percent margin.
+
+In conclusion, we developed models that could predict fairly confidently whether a potential client would or would not subscribe to a term deposit based on 17 other independent variables.
+
+
+
+# Appendix
+
+**Declaration of Originality: Take Home Exam\**
+
+By signing this statement, I hereby acknowledge the submitted Exam
+
+Course code: EBC1045
+
+Course name: Knowledge Discovery and Data Visualization
+
+to be produced independently by me.
+
+By signing this statement, I explicitly declare that I am aware of the fraud sanctions as stated in the Education and Examination Regulations (EERs) of SBE, Maastricht University.
+
+**Place**: Brussels Belgium
+
+**Date**: 18/12/2023 to the 19/12/2023
+
+**First and last name:** Edouard Dewaerheijd
+
+**Study programme**: Business Analytics
+
+**ID number:** I6341571
+
+**Id card number:** 593-0155004-58

@@ -1,0 +1,415 @@
+---
+title: "Project Assignement 1 : Summarizing, Visualizing and Exploring Data"
+author: "Coder :Edouard Dewaerheijd (i6341571) & Presenter : Vienne Jetten (i6361245, Tutorial Group 3)"
+date: "2023-11-21"
+output: rmdformats::downcute
+---
+
+------------------------------------------------------------------------
+
+# Introduction
+
+This report presents an exploratory data analysis of a student performance data set. The primary objective is to uncover insights into factors affecting student grades, with a focus on understanding the interplay between various academic and personal factors.
+
+# **Data Import and Setup**
+
+We first started by importing the Student.csv dataset and adding the packages we will need to do so.
+
+```{r}
+student <- read.csv("C:/Users/edewa/OneDrive/maastricht/year 1/Knowledge Discovery and Data Visualization/KDDV/project assignment 1/student.csv")
+
+library(ggplot2) #for graphs
+library(corrplot) #for nicer corelation matrices
+```
+
+# **Creation of a Random Subset**
+
+A random subset of 600 observations was generated from the dataset for detailed analysis. The seed was set to ensure reproducibility.
+
+```{r}
+set.seed(16)
+my_data <- student[sample(nrow(student), size = 600),]
+```
+
+# Checking For Missing Data
+
+```
+
+# Dataset Understanding
+
+## **Variables :**
+
+```{r}
+str(my_data)
+```
+
+The student dataset contains 33 variables. The variables are almost all categorical, with a couple of exceptions that we will come back to later when we will be binning them.
+
+## **Target Variable:**
+
+The most appropriate target variables for assessing students' academic performance would be G1, G2, and G3, as they represent their grades for the three periods of the academic year. A correlation matrix was employed to evaluate the level of correlation between these variables.
+
+```{r}
+correlation <- cbind(g1 = my_data$g1,
+                     g2 = my_data$g2,
+                     g3 = my_data$g3)
+
+pairs(correlation) #correlation matrice scater plot
+M = cor(correlation)
+corrplot(M, method = 'number') 
+```
+
+We can clearly notice that there is a big correlation between G1, G2, and G3. This means that students have consistently similar grades. For the next part, I chose to average the three variables as it would represent the student's global performance all along the year. To do so, I used this code:
+
+```{r}
+my_data$grade_mean <- rowMeans(my_data[, c("g1", "g2", "g3")])
+```
+
+Here are a couple of stats and a graph of the mean grade variable:
+
+```{r}
+summary(my_data$grade_mean)
+ggplot(my_data, aes(x = my_data$grade_mean)) +
+  geom_histogram(binwidth = 0.5, fill = "blue", color = "black") +
+  labs(title = "Histogram of Mean Grades", x = "Mean Grade", y = "Frequency") +
+  theme_minimal()
+```
+
+**Binning the Target Variable**: Firstly, it is important to note that to pass a class in Portugal, you need at least 10/20 (Portugal Education, 2023). So, we decided to bin the mean grade into two categories, one called 'pass' going from 10 to 20 and one 'fail' going from 0 to 10.
+
+```{r}
+my_data$pass_fail = ifelse(my_data$grade_mean > 10, "Pass", "Fail")
+summary.table.pass_faile <- table(my_data$pass_fail)
+summary.table.pass_faile
+#lets add a pie chart as well
+#creating a pass/fail a pie chart using ggplot :
+pass_fail_dataframe <- as.data.frame(summary.table.pass_faile)
+
+ggplot(pass_fail_dataframe, aes(x = "", y = Freq, fill = Var1)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar("y", start = 0) +
+  labs(fill = "Status", title = "Pass/Fail Distribution") +
+  theme_void()
+```
+
+We have now established that our target variable is 'Pass/Fail'. Let's determine what factors affect this variable.
+
+# **Outliers**
+
+For outliers, let's start by creating a function that will permit us to create boxplots easily.
+
+```{r}
+create_boxplot <- function(data, var) {
+  variable_name <- deparse(substitute(var))
+  ggplot(data, aes_string(y = variable_name)) +
+    geom_boxplot() +
+    labs(title = paste("Boxplot of", variable_name),
+         x = "",
+         y = variable_name) +
+    theme_minimal()
+}
+```
+
+Now let's run through all our numeric variables and try and spot some outlier.
+
+```{r}
+library(patchwork) #libarary makes is possible to have a multiple graphes in a matrice style patch work
+
+p1 <- create_boxplot(my_data, grade_mean)
+p2 <-create_boxplot(my_data, age)
+p3 <- create_boxplot(my_data, traveltime)
+p4 <- create_boxplot(my_data, freetime)
+p5 <- create_boxplot(my_data, dalc)
+p6 <- create_boxplot(my_data, absences)
+
+graph.this <- (p1 | p2 | p3) / (p4 | p5 | p6)
+graph.this
+
+```
+
+Now that we have established that there are outliers, let's create a function to find the outliers mathematically.
+
+```{r}
+find_outliers <- function(data, var) {
+  
+  variable_name <- deparse(substitute(var)) #transfor into string
+   
+  var_data <- data[[variable_name]]#extract data
+  
+  # Calculate IQR
+  Q1 <- quantile(var_data, 0.25)
+  Q3 <- quantile(var_data, 0.75)
+  IQR <- Q3 - Q1
+  
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  outliers <- var_data[var_data < lower_bound | var_data > upper_bound]
+  
+  cat(variable_name, ":")
+  return(unique(outliers))
+}
+```
+
+Finding the outliers:
+
+```{r}
+find_outliers(my_data, grade_mean)
+find_outliers(my_data, age)
+find_outliers(my_data, traveltime)
+find_outliers(my_data, freetime)
+find_outliers(my_data, dalc)
+find_outliers(my_data, absences)
+```
+
+# **Finding Relationships In The Data**
+
+**Categorical variables** let's start with finding relationships between categorical variables and our target variable. To do so we created a barplot graph to assess visually if there is a correlation between the variables.
+
+```{r}
+#normalized bar plot function
+barplot.norm <- function(data, y) {
+  variable_name <- deparse(substitute(y))
+  graph_title <- paste("Pass/Fail Distribution by", variable_name)
+  ggplot(data, aes_string(x = variable_name, fill = "pass_fail")) +
+    geom_bar(position = "fill") +
+    labs(title = graph_title,
+         x = variable_name,
+         y = "Percentage") +
+    theme_minimal() +
+    scale_fill_brewer(palette = "Set1")
+}
+
+#bar plot function
+barplot.func <- function(data, y) {
+  variable_name <- deparse(substitute(y))
+  graph_title <- paste("Pass/Fail Distribution by", variable_name)
+  ggplot(data, aes_string(x = variable_name, fill = "pass_fail")) +
+    geom_bar(position = "stack") +
+    labs(title = graph_title,
+         x = variable_name,
+         y = "count") +
+    theme_minimal() +
+    scale_fill_brewer(palette = "Set1")
+}
+```
+
+We also created a frequency table function to find out the percentages easily after finding graphs that stood out.
+
+```{r}
+perc.table <- function(data, y) {
+  # Convert the variable name to a string
+  y_var <- deparse(substitute(y))
+  
+  # Create a contingency table
+  counts_table <- table(data[[y_var]], data$pass_fail)
+  # Calculate percentages
+  percent_table <- prop.table(counts_table, 1) * 100
+  
+  return(percent_table)
+}
+perc.table(my_data, sex) #test to see if the function works
+```
+
+## graphs
+
+**School**
+
+```{r}
+p1 <- barplot.func(my_data, school)
+p2 <- barplot.norm(my_data, school)
+
+graph.this <- ( p1 | p2 )
+graph.this
+
+perc.table(my_data, school)
+```
+
+The 'GP' school has a significantly higher pass rate (30% higher) compared to 'MS', indicating a discrepancy between the two schools. Further investigation is needed to explore the factors contributing to this difference.
+
+**Higher**
+
+```{r}
+p1 <- barplot.func(my_data, higher)
+p2 <- barplot.norm(my_data, higher)
+
+graph.this <- ( p1 | p2 )
+graph.this
+
+perc.table(my_data, higher)
+
+```
+
+The data shows a correlation between a student's interest in higher education and their likelihood of passing. Students who express an interest in higher education pass at a significantly higher rate (over 50% more). This suggests that motivation and future aspirations are closely linked to academic performance.
+
+**Address**
+
+```{r}
+p1 <- barplot.func(my_data, address)
+p2 <- barplot.norm(my_data, address)
+
+graph.this <- ( p1 | p2 )
+graph.this
+
+perc.table(my_data, address)
+```
+
+Urban students have a pass rate of approximately 74%, while rural students show a lower pass rate of nearly 59%. This could mean that there is a difference between education level in urban/rural schools.
+
+**Mothher education**
+
+```{r}
+p1 <- barplot.func(my_data, medu)
+p2 <- barplot.norm(my_data, medu)
+
+graph.this <- ( p1 | p2 )
+graph.this
+
+perc.table(my_data, medu)
+```
+
+Students with mothers who have higher education levels (level 4) show an 85% pass rate, compared to a 67% pass rate for those whose mothers have no education (level 0), suggesting a positive correlation between a mother's education level and student success.
+
+**Guardian**
+
+```{r}
+p1 <- barplot.func(my_data, guardian)
+p2 <- barplot.norm(my_data, guardian)
+
+graph.this <- ( p1 | p2 )
+graph.this
+
+perc.table(my_data, guardian)
+```
+
+Students with fathers as guardians show the highest pass rate at approximately 78%, while those with other guardians have the lowest at around 54%, suggesting that parental involvement could be a significant factor in academic success.
+
+## numerical variables :
+
+### Let's start off with a couple of bar plots of numerical variables that stand out and binning them when necessary:
+
+**Free Time**
+
+```{r}
+p1 <- barplot.func(my_data, freetime)
+p2 <- barplot.norm(my_data, freetime)
+
+graph.this <- ( p1 | p2 )
+graph.this
+
+perc.table(my_data, freetime)
+```
+
+We can see that the more free time an individual has, the more likely it is that they are going to fail.
+
+**Work day alcool consumption**
+
+```{r}
+p1 <- barplot.func(my_data, dalc)
+p2 <- barplot.norm(my_data, dalc)
+
+graph.this <- ( p1 | p2 )
+graph.this
+```
+
+Let's try and bin this numerical variable to learn more about the effect of workday alcohol consumption on a student passing or failing school.
+
+```{r}
+my_data$dalc_bins <- cut(my_data$dalc,
+                            breaks = c( 0, 2, 4, Inf),
+                            labels = c("0-2", "2-4", '4 and more'),
+                            right = FALSE)
+barplot.norm(my_data, dalc_bins)
+```
+
+After binning we can clearly tell that the more alcohol a student consume the higher the fail rate is. Especialy when a student alcohol level is over 4 at witch the fail rate is over 50%.
+
+**absences**
+
+```{r}
+p1 <- barplot.func(my_data, absences)
+p2 <- barplot.norm(my_data, absences)
+
+graph.this <- ( p1 | p2 )
+graph.this
+```
+
+There is a lot of information on these graphs, let's bin this variable to try and understand what it tells us on the pass/fail ratio and to try and hide the outlines we established in the 8 part of this paper.
+
+```{r}
+my_data$absences_bins <- cut(my_data$absences,
+                            breaks = c( 0, 11, 19, 29, Inf),
+                            labels = c("0-11", "11-19", "19-29", "29-..."),
+                            right = FALSE)
+
+barplot.norm(my_data, absences_bins)
+```
+
+After binning the absences variable we can tell that generally speaking the more a student is absent the higher the fail rate goes, especially between 19-29 absences where over 60% of students fail. We also find out that students with over 29 absences have a 100% pass rate.
+
+### Correlation matrix and scatter plots
+
+To start of the numerical variable analysis I am going to put them all in a correlation matrices to see if we could find any clear relationship between to variables.
+
+```{r}
+correlation <- cbind(study.time = my_data$studytime,
+                     absens = my_data$dalc,
+                     alchool.weekday = my_data$walc,
+                     alchool.weekend = my_data$g,
+                     free.time = my_data$freetime,
+                     failuers = my_data$failures,
+                     age = my_data$age,
+                     famrel = my_data$famrel,
+                     go.out = my_data$goout,
+                     health = my_data$health)
+M = cor(correlation)
+corrplot(M, method = 'number')
+```
+
+We can immediately notice that there is no strong correlation between the numeric variables. There are a couple of small correlations so let's graph them with a scatter plots and make sure to color the points on the graph different colors depending on if the student is failing or passing. To do so let's create a function :
+
+```{r}
+create_scatter_plot <- function(data, var1, var2) {
+  # Convert variable names to strings
+  var1_name <- deparse(substitute(var1))
+  var2_name <- deparse(substitute(var2))
+  
+  # Generate the scatter plot
+  scatter_plot <- ggplot(data, aes_string(x = var1_name, y = var2_name, color = "pass_fail")) +
+    geom_point() +
+    labs(title = paste("Scatter Plot of", var1_name, "vs", var2_name),
+         x = var1_name,
+         y = var2_name) +
+    scale_color_manual(values = c("Fail" = "red", "Pass" = "blue")) +
+    theme_minimal()
+  
+  return(scatter_plot)
+}
+```
+
+**Graphs that stand out:**
+
+```{r}
+create_scatter_plot(my_data, walc, goout)
+```
+
+This scatter plot compares the amount of alcohol consumption during the week with how often students go out. Across all levels, students engage in both activities. However, we can observe that students who go out frequently and consume more alcohol tend to have a higher rate of failure.
+
+```{r}
+create_scatter_plot(my_data, walc, dalc)
+```
+
+```{r}
+create_scatter_plot(my_data, walc, studytime)
+```
+
+Once again we can see that student tend to consume alcohol on the weekend and study across all levels. however we can clearly see that student that consume the most alcohol and study the least tend to fail more.
+
+# Conclusion :
+
+This exploratory analysis examined several key factors influencing student performance in Portugal. Upon recognizing a strong correlation between grades over three periods, we averaged them to reflect the student's overall performance throughout the year. This approach allowed us to classify students into a binary variable indicating whether their average grade was above or below the passing threshold in Portugal, labeled as 'pass' and 'fail.'
+
+Furthermore, we investigated categorical variables and their influence on our target variable. It emerged that a student's desire to pFursue higher education significantly impacted their likelihood of passing. Additionally, we observed disparities between the two schools in the data set, with students from Gabriel Pereira (GP) generally outperforming those from the other school. Moreover, students from urban areas had slightly higher pass rates than those from rural environments.
+
+In our numerical variables analysis using a correlation matrix, we proceeded to create scatter plots for variables with the highest correlations. This revealed several insights, for example, increased weekend alcohol consumption and more frequent social outings were correlated with a higher likelihood of failing.
+
+In conclusion, these findings underscore that a student's environment, lifestyle choices, and the support they receive directly influence their chances of academic success.

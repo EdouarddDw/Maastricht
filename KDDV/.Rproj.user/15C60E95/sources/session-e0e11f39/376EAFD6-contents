@@ -1,0 +1,53 @@
+# Input the data
+dat <- read.csv(file = "C:/.../adult.txt",
+                stringsAsFactors=TRUE)
+
+# Display the names of all the columns
+names(dat)
+str(dat)
+dim(dat)
+
+# What is the reason for partitioning the data? Why are we doing this? 
+# Involve the concepts of cross-validation, overfitting and the MSE in your answer
+
+##################################################################################
+# Partition the data into 75% training data, 25% testing data
+##################################################################################
+
+# We first create an indicator column dat$part containing random uniform values
+# on the [0,1] interval
+dat$part <- runif(length(dat$income),
+                  min = 0,
+                  max = 1)
+dat[1:5, c(1,2,3,16)]
+
+# 75% of the data will be assigned to the training data set; 25% to the test data set
+training <- dat[dat$part <= 0.75,]
+testing <- dat[dat$part > 0.75,]
+training[1:5, c(1,2,3,16)]
+testing[1:5, c(1,2,3,16)]
+
+# Remove the target variable, Income, from the testing data
+names(testing)
+dim(testing)
+# The target variable is column 15
+
+testing <- testing[,-15]
+names(testing)
+# Target variable is no longer in the testing data
+
+# Remove the partitioning variable, Part, from both data sets
+# Part is now the 15th variable
+testing <- testing[,-15]
+names(testing)
+dim(testing)
+
+names(training)
+dim(training)
+# Part is the 16th variable in the training data set
+training <- training[,-16]
+names(training)
+dim(training)
+
+# Discuss how to validate the partition
+

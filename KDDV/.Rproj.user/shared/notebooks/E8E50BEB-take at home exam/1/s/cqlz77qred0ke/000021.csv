@@ -1,0 +1,6 @@
+"0","cat(""numerical varibles : Age, Balance, Day, duration, campaign, pdays, previous)"
+"0",""")"
+"1","numerical varibles : Age, Balance, Day, duration, campaign, pdays, previous)
+"
+"0","cat(""categorical varibles : job,Marital, Education, Default, Housing, Loan, Contact, month, poutcome, y"")"
+"1","categorical varibles : job,Marital, Education, Default, Housing, Loan, Contact, month, poutcome, y"

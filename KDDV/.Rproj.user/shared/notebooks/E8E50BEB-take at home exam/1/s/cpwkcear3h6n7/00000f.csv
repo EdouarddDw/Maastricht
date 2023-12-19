@@ -1,0 +1,2 @@
+"0","set.seed(16)"
+"0","my_data <- BankDeposit[sample(nrow(BankDeposit), size = 5000),]"

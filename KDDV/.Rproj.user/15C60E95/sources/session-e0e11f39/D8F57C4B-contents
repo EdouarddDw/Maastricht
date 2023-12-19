@@ -1,0 +1,767 @@
+---
+title: "Housing Dataset Analysis"
+author: "Juliusz Glodek"
+date: "2022-12-21"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE, warning=FALSE, message=FALSE}
+library(ggplot2)
+library("data.table")
+library(rpart)
+library(rpart.plot)
+library(corrplot)
+library(C50)
+library(tidyverse)
+library(caret)
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+```
+
+
+# Exploratory Data Analysis
+
+## Prelimenary steps:
+
+Firstly, the data set was loaded into a data frame. Afterwards, per requirements of the task, a random subset of 480 observations was taken. Notice that since the variable names were not given in the original file, they had to be added in manually.  
+
+``` {r, error=FALSE, warning=FALSE, echo=T, results='hide'} 
+housing.nonames <- read.csv(file = "housing.csv", sep=";" , stringsAsFactors=TRUE, header = FALSE)
+set.seed(11)
+vector_names = c('CRIM', 'ZN', 'INDUS', 'CHAS', 'NOX', 'RM', 'AGE', 'DIS', 'RAD', 'TAX', 'PTRATIO', 'B', 'LSTAT', 'MEDV')
+housing <- housing.nonames[sample(nrow(housing.nonames), size = 480),]
+housing <- `colnames<-`(housing, vector_names)
+```
+
+Then, in order to get a feel for the data, we look at the structure, the summary and the first ten observations in the data set:
+
+``` {r, echo=FALSE}
+str(housing)
+summary <- as.table(summary(housing))
+kable(summary)
+housing10 <- housing[1:10,] # probably useless
+kable(housing10)
+```
+
+Firstly, let us analyze the structure of the data set. It would seem that of the 14 variables, all except the binary indicator *Chas*, are numeric. Furthermore, all the numeric variables seem continuous, even tough the output suggests that *RAD* (index of access to radial highways) and *TAX* (full value property tax rate per 10000$) are discrete, they are measured on a continuous scale. Such a heavy emphasis on numeric data points us in the direction of regression based models, or a model which relies on numeric inputs, such as the K-nearest-neighbors algorithm. The target variable in the dataset is *MEDV* - median value of owner occupied homes per observation (each observation represents a suburb town). 
+
+Looking at both the summary and the head of the data, we see that several variables, particularly the indicator variable *CHAS* , where we see that only around 7.3% of observations have a value of 1. Similarly, the *ZN* variable also seems to be unevenly distributed, with a range of 0 to 100 and more than 50% of the observations having a value of 0. This is cause for concern and indicates that we should look closely at the outliers for those (and all) variables.  
+
+
+### Checking for anomalous fields:
+
+Firstly, we will check whether any of the fields are missing:
+
+``` {r}
+missing <- is.na(housing) 
+sum(missing[missing == TRUE])
+```
+
+From this we can clearly see that no fields in the dataset are missing. 
+
+Looking yet again at the structure and the summary of the data set, it seems clear that there are no anomalous fields within the dataset as a whole. All the numeric variables seem to have ranges that could accurately represent the underlying distribution, and it seems that no categorical variable has missing levels (which would be denoted by a symbol such as "?").
+
+Without taking outliers into account, we can conclude that the dataset doesn't seem to have any anomalous fields.
+
+-----
+
+## Looking closer at the variables:
+
+### The target - *MEDV*
+
+``` {r, echo=FALSE}
+ggplot(housing) + geom_histogram(bins=30, mapping = aes(x = MEDV)) + scale_x_continuous('Median Home Value (10,000$)') + scale_y_continuous('Count') +  guides(guide_legend(title='Distribution of the target variable')) + theme( axis.text= element_text (size=9), axis.title = element_text (size=16, face= "bold" ))
+
+```
+
+As seen above, the distribution of the final grade seems to be somewhat unimodal and right skewed, roughly centered around 21, with a significant number of extremely high values, which at a first glance seem likely to be outliers. This suggests that we have to look into outliers. This will be done using the method based on Inter Quantile Range. This is since IQR, when compared to Z-score, which is based on mean and standard deviation, is a much more robust measure. 
+
+The below function is used to find the boundaries for what values are considered outliers. This will be shown only here, but was applied to all numerical variables in the dataset. 
+
+``` {r echo=T, results='hide'}
+show(boxplot(housing$MEDV)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+```
+
+The below bloxpot visualizes the outliers, with labeled "whiskers" (cut off values for outliers). 
+
+``` {r, echo = FALSE}
+MEDV <- housing$MEDV
+boxplot(MEDV,horizontal=TRUE, range=1.5, main =substitute(paste("Box plot of ",italic('Median House Value'))))
+text(x=5.6,labels=5.6,y=1.2) 
+text(x=36.5,labels=36.5,y=1.2) 
+```
+
+Clearly, the result matches what we saw on the chart, with many of the extremely high values being classified as outliers. The graph includes labels for the cutoff points for what values are considered outliers. As wee can see, there is significantly more outliers over the value of 36.5 then those lower than 5.6. This does not seem to stem from sampling or data entry errors, but rather represent the actual data distribution for *MEDV*. This is a really interesting trend to explore, as unequal property value (and in fact the value of any assets owned) is one of the most important causes of both wealth, as well as income inequality, therefore a deeper look into how discrimination in the form of unequal access to opportunities drives inequality. We see how ease of access to education (pupil -teacher ration), proportion of Afro-Americans and other variables determine Median House Values, and therefore (in significant part) wealth distribution. With that in mind, it would seem most advantageous to create two bins with an unequal frequency, one representing towns with unusually high median home values (therefore towns with a higher concentration of unusually wealthy individuals) and the second bin containing the rest of the observations - the "normal" ones. This is since the USA is a relatively unequal society, with the upper echelons of the wealthiest individuals holding an unproportionally high percentage of all wealth in the US. 
+
+Additionally, this binning could also be effective when applied in business contexts - towns with higher Median home values are sure to also have richer inhabitants, hence it is advantageous for businesses to identify "wealthier" towns, as they present an opportunity for greater profits. This is important knowledge, as Median home Value is not always publicly available, and the figures available in public databases are often outdated or inaccurate. 
+
+### Binning the target variable
+
+We will bin the target into two categories - "High" (MEDV > 25.0, which is the 3rd quartile value) and "Normal", which will include all the other observations. While it could be especially interesting to bin on whether the value is a outlier to the righ of the median, the proportion of such observations in the dataset is very small, hence even a baseline model (one that would predict the majority class "Normal") would be extrememly accurate, and the discussion of any created model's accuracy would be pointless. Hence, by making the "positive" class be 25% of all observations, we lower the accuracy of the baseline model, meaning that the discussion of any created model's accuracy is viable, while also still retaining insight into the inequality in the asset distribution. Coincidentally, the value for the 3rd quartile - 250 000$, is also in the middle of the population range of MEDV (0 to 500 000). 
+
+
+
+```{r, warning=FALSE, message=FALSE}
+MEDV_bin <- ifelse(housing$MEDV > 25.0, "High", "Normal")
+head(MEDV_bin)
+```
+
+We see that the two bins were successfully applied to the target variable. The proportion of "High" observations is, as expected `r length(MEDV_bin[MEDV_bin == "High" ])/length(MEDV_bin)` - exactly 25% when rounded. 
+
+Now that the target variable is binned, we can examine its relationships with the predictor variables.
+
+---------
+
+## **The Predictors**
+
+Now, we will look at each predictor one by one, considering both its outliers (or in the case of the indicator variable *CHAS*, the contingency table), as well as its relationship with the (binned) target. Only extreme outliers and strong relationships will be visualized. 
+
+### **CRIM** - per capita crime rate by town
+
+``` {r echo=FALSE, results='hide'}
+show(boxplot(housing$CRIM)$stats[c(1, 5),]) 
+
+boxplot.stats(housing$CRIM)$out 
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$CRIM,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Crime Rate per capita'))))
+text(x=1.6,labels=0.00632,y=1.3) #value mdified so that it can fit properly
+text(x=8.98296,labels=8.98296,y=0.8) 
+```
+
+We see that most towns have a per capita crime rate of around 0%, however we also observe many outliers, with the highest value being a staggering 89%. Those values do seem to just stem naturally from the data distribution, and as such no action will be taken. Nonetheless, they are a testament to the inequality in suburban Boston
+
+Histograms:
+
+``` {r, fig.show="hold", out.width="10%", warning=FALSE}
+ggplot(housing, aes(CRIM, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+
+ggplot(housing, aes(CRIM, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+We clearly observe an inverse relationship between *CRIM* and the target, where towns with less crime have, predictably, Higher home values. This, however, is not 100% certain, as so few observations have *CRIM* values that are much bigger than 0. Nonetheless, this relationship seems significant and will be included in any constructed model.
+
+
+
+### **ZN** - proportion of residential land zoned for lots over 25,000 ft.
+
+
+``` {r echo=FALSE, results='hide'}
+boxplot.stats(housing$ZN)$out
+
+show(boxplot(housing$ZN)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$ZN,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Crime Rate per capita'))))
+text(x=0,labels=0,y=1.3) #value mdified so that it can fit properly
+text(x=40,labels=40,y=1.2) 
+```
+
+We see that most towns have less than 20% of their land zoned for very large residences, but there is quite a few outliers, with some towns having almost a 100%
+
+Histograms:
+
+``` {r   fig.show="hold", out.width="10%", warning=FALSE}
+ggplot(housing, aes(ZN, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Proportion of land zoned for large residential properties") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+
+ggplot(housing, aes(ZN, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Proportion of land zoned for large residential properties") + scale_y_continuous("Proportion") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+The relationship was deemed to weak and unclear to visualize. 
+
+
+### **INDUS** - proportion of non-retail business acres per town
+
+``` {r echo=FALSE, results='hide'}
+boxplot.stats(housing$INDUS)$out
+
+show(boxplot(housing$INDUS)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+No outliers were found. 
+
+
+``` {r, echo=FALSE}
+boxplot(housing$INDUS,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Proportion of non-retail business acres per town'))))
+ 
+```
+
+Histograms:
+
+``` {r   fig.show="hold", out.width="10%", warning=FALSE}
+ggplot(housing, aes(INDUS, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Proportion of non-retail business land") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+
+ggplot(housing, aes(INDUS, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Proportion of non-retail business land") + scale_y_continuous("Proportion") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+We observe a very clear relationship between this predictor and the target, with towns having more land zoned for non-retail businesses suffering lower home values. This is clearly an excellent predeictor. 
+
+
+### **NOX** - nitric oxides concentration (parts per 10 million)
+
+``` {r echo=FALSE, results='hide'}
+boxplot.stats(housing$NOX)$out
+
+show(boxplot(housing$NOX)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$NOX,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('nitric oxides concentration'))))
+
+```
+
+No outliers were found. 
+
+Histograms:
+
+``` {r   fig.show="hold", out.width="10%", warning=FALSE}
+ggplot(housing, aes(NOX, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Nitric oxides concentration") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+
+ggplot(housing, aes(NOX, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Nitric oxides concentration") + scale_y_continuous("Proportion") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+Though some relationship was found, it was too unclear to be considered significant and therefore will not be visualized. 
+
+
+### **RM** - average number of rooms per dwelling
+
+``` {r echo=FALSE, results='hide'}
+boxplot.stats(housing$RM)$out
+
+show(boxplot(housing$RM)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$RM,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Average number of rooms per dwelling'))))
+text(x=4.880,labels=4.880,y=1.2) #value mdified so that it can fit properly
+text(x=7.691,labels=7.691,y=1.2) 
+```
+
+We see that there are quite a few outliers, with a lot of values with very high number of rooms. Those, however, do not seem to be a result of any sampling bias or data entry error, hence no action will be taken. 
+
+Histograms:
+
+``` {r   fig.show="hold", out.width="10%", warning=FALSE}
+ggplot(housing, aes(RM, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Average number of rooms per dwelling") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+
+ggplot(housing, aes(RM, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Average number of rooms per dwelling") + scale_y_continuous("Proportion") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+This is perhaps one of the most singificant relationships within the dataset. We can clearly observe that as *RM* increases, so does the proportion of "High" *MEDV* values. This variable is sure to feature in any model. 
+
+
+
+### **AGE** - proportion of owner-occupied units built prior to 1940
+
+``` {r echo=FALSE, results='hide'}
+boxplot.stats(housing$AGE)$out
+
+show(boxplot(housing$AGE)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$AGE,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Crime Rate per capita'))))
+```
+
+No outliers were found
+
+Histograms:
+
+``` {r   fig.show="hold", out.width="10%", warning=FALSE}
+ggplot(housing, aes(AGE, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Proportion of owner-occupied units built prior to 1940") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+
+ggplot(housing, aes(AGE, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Proportion of owner-occupied units built prior to 1940") + scale_y_continuous("Proportion") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+This relationship is somewhat unclear, but seems significant enough to warrant inclusion in the models. It seems that towns with many old buildings, have, as expected, lower median house values. 
+
+
+
+### **DIS** - weighted distances to five Boston employment centres
+
+``` {r echo=FALSE, results='hide'}
+boxplot.stats(housing$DIS)$out
+
+show(boxplot(housing$DIS)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$DIS,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Weighted distances to five Boston employment centres'))))
+text(x=1.3296,labels=1.1296,y=1.2) #value mdified so that it can fit properly
+text(x=9.2229,labels=9.2229,y=1.2) 
+```
+
+We see that there is not a lot of outlying values, and all of them represent unusually large distances from employment centres. 
+
+Histograms:
+
+``` {r   fig.show="hold", out.width="10%", warning=FALSE}
+ggplot(housing, aes(DIS, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Weighted distances to five Boston employment centres") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+
+ggplot(housing, aes(DIS, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Weighted distances to five Boston employment centres") + scale_y_continuous("Proportion") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+There is a somewhat significant relationship between *DIS* and the target. Predictably (for the US), as distance increases, housing values increase. This, however, is not an exactly clear relationship
+
+### **RAD** - index of accessibility to radial highways
+
+``` {r echo=FALSE, results='hide'}
+boxplot.stats(housing$RAD)$out
+
+show(boxplot(housing$RAD)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$RAD,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Crime Rate per capita'))))
+ 
+```
+
+No outliers were found.
+
+Histograms:
+
+``` {r   fig.show="hold", out.width="10%", warning=FALSE}
+ggplot(housing, aes(RAD, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+
+ggplot(housing, aes(RAD, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+The relationship was deemed to weak to visualize. 
+
+
+### **TAX** - full-value property-tax rate per $10,000
+
+``` {r echo=FALSE, results='hide'}
+boxplot.stats(housing$TAX)$out
+
+show(boxplot(housing$TAX)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$TAX,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Crime Rate per capita'))))
+```
+
+No outliers were found. 
+
+Histograms:
+
+``` {r   fig.show="hold", out.width="10%", warning=FALSE}
+ggplot(housing, aes(TAX, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Full-value property-tax rate per $10,000") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+
+ggplot(housing, aes(TAX, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Full-value property-tax rate per $10,000") + scale_y_continuous("Proportion") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+It seems that, surprisingly, as Tax rate rises, the median house value falls, however this should be looked at skeptically due to the very varied an uneven data distribution. 
+
+
+### **PTRATIO** - pupil-teacher ratio by town
+
+``` {r echo=FALSE, results='hide'}
+boxplot.stats(housing$PTRATIO)$out
+
+show(boxplot(housing$PTRATIO)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$PTRATIO,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Pupil-teacher ratio'))))
+text(x=13.6,labels=13.6,y=1.2) #value mdified so that it can fit properly
+text(x=22.0,labels=22.0,y=1.2) 
+```
+
+We can see that there's only a few outliers, all of them representing towns with seemingly excellently staffed education facilities. 
+
+Histograms:
+
+``` {r   fig.show="hold", out.width="10%", warning=FALSE}
+ggplot(housing, aes(PTRATIO, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Pupil-teacher ratio") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+
+ggplot(housing, aes(PTRATIO, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Pupil-teacher ratio") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Unsurprisingly, towns with a lower number of students per teacher have higher property values. This relationship is significant and *PTRATIO* is an excellent predictor. 
+
+
+### **B** - value corresponding to the proportion of Afro-Americans 
+
+
+``` {r echo=FALSE, results='hide'}
+boxplot.stats(housing$B)$out
+
+show(boxplot(housing$B)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$B,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Level of proportion of Afro-Americans'))))
+text(x=344.91,labels=344.91,y=1.3) #value mdified so that it can fit properly
+text(x=396.90,labels=396.90,y=0.7) 
+```
+
+We observe a very significant number of outliers. Due to the formula according to which *B* is calculated, towns with lower *B* value have a lower proportion of Afro-Americans
+
+Histograms:
+
+``` {r   fig.show="hold", out.width="10%", warning=FALSE}
+ggplot(housing, aes(B, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+
+ggplot(housing, aes(B, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+The relationship was deemed too insignificant to visualize. 
+
+
+### **LSTAT* - % lower status of the population
+
+``` {r echo=FALSE, results='hide'}
+boxplot.stats(housing$LSTAT)$out
+
+show(boxplot(housing$LSTAT)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$LSTAT,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Percentage of lower status of the population'))))
+text(x=1.73,labels=1.73,y=1.3) #value mdified so that it can fit properly
+text(x=30.81,labels=30.81,y=0.8) 
+```
+
+We observe relatively few outliers, all of them with a unusually high percentage of lower status inhabitants. 
+
+Histograms:
+
+``` {r   fig.show="hold", out.width="10%", warning=FALSE}
+ggplot(housing, aes(LSTAT, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Percentage of lower status of the population") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+
+ggplot(housing, aes(LSTAT, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Percentage of lower status of the population") + scale_y_continuous("Proportion") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Quite predictably, towns with very few low status inhabitants tend to have higher property values. This is a very significant relationship and should be included in any model. 
+
+
+### **CHAS** - Charles River dummy variable
+
+``` {r, echo=FALSE, message=FALSE}
+counts.CHAS <- table(MEDV_bin, housing$CHAS, dnn=c("Result", "CHAS dummy variables"))
+sumtable.CHAS <- addmargins(counts.CHAS , margin = seq_along(dim(counts.CHAS)), FUN = sum, quiet = TRUE)
+kable(sumtable.CHAS)
+
+col.margin.CHAS <- round(prop.table(counts.CHAS,
+margin = 2),
+4)
+kable(col.margin.CHAS)
+```
+
+Looking at the contingency table and the proportion contingency table, we see that towns with tracts by the river tend to have higher median home values. This however, should be taken with a grain of salt, as there's very few such observations. 
+
+``` {r   fig.show="hold", out.width="10%", warning=FALSE}
+ggplot() + geom_bar(data=housing, 
+              aes(x=factor(housing$CHAS),
+              fill=factor(MEDV_bin)),
+              position='stack')+
+              scale_x_discrete('CHAS dummy value') +
+              scale_y_continuous('Count') +
+              guides(fill=guide_legend(title='Result'))+
+              theme(axis.text=element_text(size=10), 
+                    axis.title=element_text(size=16,face="bold"))
+
+ggplot() + geom_bar(data=housing, 
+              aes(x=factor(housing$CHAS),
+              fill=factor(MEDV_bin)),
+              position='fill')+
+              scale_x_discrete('CHAS dummy value') +
+              scale_y_continuous('Proportion') +
+              guides(fill=guide_legend(title='Median House Value'))+
+              theme(axis.text=element_text(size=10), 
+                    axis.title=element_text(size=16,face="bold")) 
+```
+
+Again, though the relationship is very strong, there is cause to doubt it, as *CHAS* is distributed so unequally. Nonetheless, this variable wil be used as a predictor for the models.
+
+------
+
+## Checking for correlation between the numerical variables:
+
+A scatter plot matrix is shown below, where the numerical variables are listed in order of their appearance in the set. 
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.dim = c(20, 20)}
+numerical_pairs <- cbind(CRIM = housing$CRIM, ZN = housing$ZN, INDUS = housing$INDUS, NOX = housing$NOX, RM = housing$RM, AGE = housing$AGE, DIS = housing$DIS, RAD = housing$RAD, TAX = housing$TAX, PTRATIO = housing$PTRATIO, B = housing$B, LSTAT = housing$LSTAT)
+
+pairs(numerical_pairs, panel=panel.smooth)
+```
+
+The red lines represent the smoothest possible trend lines that could be fit over the scatter plots. Due to the sheer number of variables in the dataset, this figure is difficult to read as part of a document, however it is still useful as it provides a visual overview of the relationships between each of the numeric variables. At a glance, no variables seem to have an extremely strong correlation 
+
+A table of correlation coefficients is provided below:
+
+``` {r, echo=FALSE}
+correlations_table <- as.table(cor(numerical_pairs))
+corrplot(correlations_table, method = 'number')
+```
+
+As seen in the table, there clearly are numerical variables in the dataset that are highly correlated. The code below finds the highest positive and negative correlations in the table:
+
+``` {r}
+max(correlations_table[correlations_table != 1])
+min(correlations_table[correlations_table != 1])
+```
+There are many strong correlations between the predictors in the set. The strongest is the one between *RAD* and *TAX*, and it seems that they practically represent the same information. Another particularly strong correlation is the one between *AGE* and *NOX*. Below, some of the other strong correlations are listed:
+
+- NOX and DIS
+
+- INDUS and NOX
+
+- INDUS and DIS 
+
+- INDUS and TAX
+
+- ZN and DIS
+
+Clearly, there are significant multicollinearity issues within the dataset. As so many variables are strongly correlated, it seems somewhat unfeasible to remove some, as nearly half would end up discarded. As such, it is clear that the use of a regression model is not advisable, and models that are not affected by Multicollinearity, such as decision tree type models. Similarly, a K-nearest-neighbors algorithm also seems appropriate. This is since multicollinearity mostly affects interpretability, which is inherently not an advantage of KNN, since it does not provide any output (save for the prediction) that could be easily interpreted. Nonetheless, this is possibly an issue to adress, but there is reason to believe that feature selection may somewhat reduce the problem. 
+
+-----
+
+## Conclusion:
+
+### Further insights for modelling
+
+The following variables should be definitely included in any model predicting/ classifying the final exam result, owing to their effect size on the target:
+
+- CRIM
+- INDUS
+- RM
+- TAX
+- AGE
+-
+- PTRATIO
+- LSTAT
+- CHAS
+
+The other variables listed in the summary but not outlined here also provide information on the target, but to a much lesser extent. Especially, the relationship between *DIS* and target had much variability, and since *DIS* was correlated to many of the other, more significant predictors, it will not be used in model building. 
+
+------ 
+
+# **Model Building**
+
+## **Spliting the Data**
+
+
+Since the target is binned, we replace the column corresponding with the target variable with the vector containing the binned values.
+
+``` {r, echo=FALSE} 
+housing.model <- replace(housing, c(14), as.factor(MEDV_bin))
+
+str(housing.model)
+```
+
+In order to properly test the model and to avoid over fitting, the data set will be split into a training and a hold out set. The data was split with a ratio of 4:1 as this split ensures that both the training and the testing subset represent the overall population. Other ratios were also tested, but only the best result will be presented. The code that achieves this can be seen below:
+
+``` {r} 
+set.seed(111)
+train_rows <- sample(nrow(housing.model), nrow(housing.model) * 0.75)  
+housing_train <- housing.model[train_rows, ]
+housing_test <- housing.model[-train_rows, ]
+``` 
+
+### **Testing the split**
+
+We now check whether the data distribution in the two subsets is approximately equal. This will be done only for the target and significant predictors. 
+
+### **MEDV**  - the target
+
+We must ensure that the proportion of the target variable in each split does not differ significantly. For binary variables, a Z-test is used:
+
+``` {r, echo = FALSE}
+length(housing_train$MEDV[housing_train$MEDV == "High"])
+length(housing_test$MEDV[housing_test$MEDV == "High"])
+
+prop.test( x = c(89,29) , n=  c(360,120), alternative = "two.sided", correct = FALSE)
+```
+
+We cannot conclude that the true difference in proportion is non-zero
+
+### **CHAS
+
+``` {r, echo = FALSE}
+length(housing_train$CHAS[housing_train$CHAS == "1"])
+length(housing_test$CHAS[housing_test$CHAS == "1"])
+
+prop.test( x = c(27,8) , n=  c(360,120), alternative = "two.sided", correct = FALSE)
+```
+
+We cannot conclude that the true difference in proportion is non-zero
+
+
+### **CRIM**
+
+For continuous variables, a t-test for the difference in means is used to verify that the distribution is approximately equal between the two subsets.
+
+``` {r}
+t.test(housing_train$CRIM, housing_test$CRIM)
+```
+
+We cannot conclude that the true difference in means is non-zero
+
+### **INDUS**
+
+``` {r}
+t.test(housing_train$INDUS, housing_test$INDUS)
+```
+
+We cannot conclude that the true difference in means is non-zero
+
+### **RM**
+
+``` {r}
+t.test(housing_train$RM, housing_test$RM)
+```
+
+We cannot conclude that the true difference in means is non-zero
+
+### **AGE**
+
+``` {r}
+t.test(housing_train$AGE, housing_test$AGE)
+```
+
+We cannot conclude that the true difference in means is non-zero
+
+### **DIS**
+
+``` {r}
+t.test(housing_train$DIS, housing_test$DIS)
+```
+
+We cannot conclude that the true difference in means is non-zero
+
+### **TAX**
+
+``` {r}
+t.test(housing_train$TAX, housing_test$TAX)
+```
+
+We cannot conclude that the true difference in means is non-zero
+
+### **PTRATIO**
+
+``` {r}
+t.test(housing_train$PTRATIO, housing_test$PTRATIO)
+```
+
+We cannot conclude that the true difference in means is non-zero
+
+### **LSTAT**
+
+``` {r}
+t.test(housing_train$LSTAT, housing_test$LSTAT)
+```
+
+% come back later, comment, maybe try some more to get the perfect split
+
+------
+
+# **Model Building**
+
+Non significant predictors were removed from the dataset. Due to feature selection, only two variables - *INDUS* and *TAX* were significantly correlated, but due to them both being very significant predictors, this was ignored. 
+
+``` {r, echo=FALSE}
+housing_train <- subset(housing_train, select = -c(2,5,8,9,12))
+housing_test <- subset(housing_test, select = -c(2,5,8,9,12))
+```
+
+## **C5.0 Decision Tree**
+
+A decision tree is a type of model that divides the instance space through axis parallel splits - decisions are taken with one variable in mind at a time, and by following a certain "path", where at each "fork" we make a decision based on a give attribute of the observation, we arrive at a decision. The C5.0 is an algorithm that constructs a tree model, based on information gain - the savings in bits needed to transfer information. The code below was used to construct the tree:
+
+``` {r}
+predictors <- subset(housing_train, select = -c(9))
+dependant <- as.factor(housing_train$MEDV)
+c50fit <- C5.0(x = predictors, y = dependant) 
+summary(c50fit)
+```
+
+Due to the "bushiness" of the C5.0 tree, it will not be visualized. Nonetheless, we see that the tree mostly relied on *RM* and *LSTAT* in its predictions, with *TAX* also being important in the decision making process of the tree. 
+
+Accuracy:
+
+``` {r}
+housingpredict.c50 <- predict(c50fit, housing_test, type= "class")
+confusionMatrix( factor(housingpredict.c50), factor(housing_test$MEDV), mode = "everything")
+```
+We can observe that the model is quite accurate. 
+
+## **CART decision tree**
+
+A CART decision tree was generated using the code below. 
+
+``` {r}
+
+cartfit <- rpart(MEDV~. , data = housing_train, method = "class", control = rpart.control(cp=0)) 
+
+print(cartfit)
+
+rpart.plot(cartfit, type = 3, box.palette = c("red", "blue"), fallen.leaves = TRUE)
+
+printcp(cartfit)
+``` 
+
+Accuracy:
+
+``` {r}
+housingpredict.CART <- predict(cartfit, housing_test, type= "class")
+confusionMatrix( factor(housingpredict.CART), factor(housing_test$MEDV), mode = "everything")
+```
+
+
+The tree achieved a very impressive 93.33% accuracy on the dataset, a value much higher than the baseline model (No Information Rate - 75.83%), as shows by the extremely low p-value. Nonetheless, the distribution of the binned target variable is very unequal, hence the accuracy figure is somewhat misleading. This means we must look to other metrics:
+
+The Kappa value, 0.8091, suggests that, even when acconting for the uneven target distribution, our model is quite accurate. The high sensitivity - 0.7931, suggests that the model is quite good at idenitfying "positive" observations - towns with Median Home Values over 250 000 $. 
+
+The quite high F1 value suggests that both the precision and recall of the model are quite high. This is also somewhat reflected in the high Detection rate - 0.1917. 
+
+Lastly, the balanced accuracy metric, which represents how accurate the model is when accounting for the uneven data distribution, is relatively high, at 88.56%.
+
+## **Weighted K-Nearest-Neighbors**
+
+A K Nearest Neighbors algorithm stores each observation as a feature vector (a vector of all of its attributes expressed in a numerical form). Since the model relies on distance calculations, all the variables must be expressed in a numerical form and normalized, so that variables with bigger ranges (e.g *TAX*) do not affect the decision disproportionately. Luckily, all the important predictors are already numeric or expressed in a numeric form. Furthermore, the algorithm will automatically normalize the data trough the inclusion of the term *preProcess = "RANGE"*. This normalization procedure sbtrats the minimum value from the observation value (for a given variable), and then divides the result by the range of values for that attribute. As a result, all values are expressed as values between 0 ad 1, and the data is normalized. 
+
+``` {r}
+kknn.grid <- expand.grid(kmax = 120, distance = 2, kernel = "inv")
+
+kknn.fit <- train(form = MEDV~., data = housing_train , method = "kknn" , tuneGrid = kknn.grid, preProcess = "range")
+kknn.fit
+```
+
+In order to verify accuracy, the test set also has to be normalized, but the model also does this automatically. 
+
+
+Accuracy:
+
+``` {r, warning=FALSE}
+housingpredict.kknn <- predict(kknn.fit, housing_test)
+confusionMatrix( factor(housingpredict.kknn), factor(housing_test$MEDV), mode = "everything")
+```
+
+Unfortunately, this model had the exact same performance as the CART decision tree, but required more preparation and computational time. 
+------
+
+# **Summary**
+
+By all metrics, the CART decision tree was the best model constructed for the data set. It had by far the bet metrics and was clearly the best model, both for its accuracy and interpretability. 
+
+The C5.0 decision tree followed as a close second in its performance and validity. The balanced accuracy, kappa, F1 and al other metrics were still very impressive, but worse in comparison to the CART tree. The tree made only Type 2 errors, reducing its practicality greatly, and the fact that it was limited to the usage of only one variable - *g2* - seemed to negatively affect its performance.
+
+Lastly, the weighted K-nearest-neighbors algorithm was clearly inferior to the CART decision tree, as even tough it had identical accuracy, it was more computationally heavy  
+

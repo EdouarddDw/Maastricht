@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<style>body{background-color:white;}</style>
+<script src="lib/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="lib/bootstrap-3.3.5/css/cosmo.min.css" rel="stylesheet" />
+<script src="lib/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="lib/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="lib/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="lib/kePrint-0.0.1/kePrint.js"></script>
+<link href="lib/lightable-0.0.1/lightable.css" rel="stylesheet" />
+
+</head>
+<body>
+<table class=" lightable-minimal" style='font-family: "Trebuchet MS", verdana, sans-serif; margin-left: auto; margin-right: auto;'>
+ <thead>
+  <tr>
+   <th style="text-align:left;">   </th>
+   <th style="text-align:right;"> age </th>
+   <th style="text-align:right;"> balance </th>
+   <th style="text-align:right;"> day </th>
+   <th style="text-align:right;"> duration </th>
+   <th style="text-align:right;"> campaign </th>
+   <th style="text-align:right;"> pdays </th>
+   <th style="text-align:right;"> previous </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:left;"> Minimum </td>
+   <td style="text-align:right;"> 18.0000000 </td>
+   <td style="text-align:right;"> -3313.00000 </td>
+   <td style="text-align:right;"> 1.0000000 </td>
+   <td style="text-align:right;"> 4.000000 </td>
+   <td style="text-align:right;"> 1.000000 </td>
+   <td style="text-align:right;"> -1.000000 </td>
+   <td style="text-align:right;"> 0.000000 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Maximum </td>
+   <td style="text-align:right;"> 86.0000000 </td>
+   <td style="text-align:right;"> 71188.00000 </td>
+   <td style="text-align:right;"> 31.0000000 </td>
+   <td style="text-align:right;"> 3094.000000 </td>
+   <td style="text-align:right;"> 50.000000 </td>
+   <td style="text-align:right;"> 871.000000 </td>
+   <td style="text-align:right;"> 25.000000 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Mean </td>
+   <td style="text-align:right;"> 41.2268000 </td>
+   <td style="text-align:right;"> 1494.13280 </td>
+   <td style="text-align:right;"> 15.7790000 </td>
+   <td style="text-align:right;"> 324.781200 </td>
+   <td style="text-align:right;"> 2.636000 </td>
+   <td style="text-align:right;"> 45.391400 </td>
+   <td style="text-align:right;"> 0.666400 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Median </td>
+   <td style="text-align:right;"> 39.0000000 </td>
+   <td style="text-align:right;"> 507.00000 </td>
+   <td style="text-align:right;"> 16.0000000 </td>
+   <td style="text-align:right;"> 221.000000 </td>
+   <td style="text-align:right;"> 2.000000 </td>
+   <td style="text-align:right;"> -1.000000 </td>
+   <td style="text-align:right;"> 0.000000 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> 1st Quartile </td>
+   <td style="text-align:right;"> 32.0000000 </td>
+   <td style="text-align:right;"> 97.75000 </td>
+   <td style="text-align:right;"> 8.0000000 </td>
+   <td style="text-align:right;"> 121.000000 </td>
+   <td style="text-align:right;"> 1.000000 </td>
+   <td style="text-align:right;"> -1.000000 </td>
+   <td style="text-align:right;"> 0.000000 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> 3rd Quartile </td>
+   <td style="text-align:right;"> 49.0000000 </td>
+   <td style="text-align:right;"> 1658.00000 </td>
+   <td style="text-align:right;"> 21.0000000 </td>
+   <td style="text-align:right;"> 412.000000 </td>
+   <td style="text-align:right;"> 3.000000 </td>
+   <td style="text-align:right;"> -1.000000 </td>
+   <td style="text-align:right;"> 0.000000 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Range </td>
+   <td style="text-align:right;"> 68.0000000 </td>
+   <td style="text-align:right;"> 74501.00000 </td>
+   <td style="text-align:right;"> 30.0000000 </td>
+   <td style="text-align:right;"> 3090.000000 </td>
+   <td style="text-align:right;"> 49.000000 </td>
+   <td style="text-align:right;"> 872.000000 </td>
+   <td style="text-align:right;"> 25.000000 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> IQR </td>
+   <td style="text-align:right;"> 17.0000000 </td>
+   <td style="text-align:right;"> 1560.25000 </td>
+   <td style="text-align:right;"> 13.0000000 </td>
+   <td style="text-align:right;"> 291.000000 </td>
+   <td style="text-align:right;"> 2.000000 </td>
+   <td style="text-align:right;"> 0.000000 </td>
+   <td style="text-align:right;"> 0.000000 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Skewness </td>
+   <td style="text-align:right;"> 0.7473871 </td>
+   <td style="text-align:right;"> 6.45145 </td>
+   <td style="text-align:right;"> 0.1036686 </td>
+   <td style="text-align:right;"> 2.363534 </td>
+   <td style="text-align:right;"> 4.745425 </td>
+   <td style="text-align:right;"> 2.590496 </td>
+   <td style="text-align:right;"> 4.802089 </td>
+  </tr>
+</tbody>
+</table> <script type="text/x-mathjax-config">MathJax.Hub.Config({tex2jax: {inlineMath: [["$","$"]]}})</script><script async src="https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+</body>
+</html>

@@ -1,0 +1,222 @@
+"0","trainData$y <- as.factor(trainData$y)"
+"0",""
+"0","model2 <- C5.0(y ~ ., data = trainData)"
+"0",""
+"0","summary(model2)"
+"1","
+Call:
+"
+"1",""
+"1","C5.0.formula(formula = y ~ ., data = trainData)"
+"1",""
+"1","
+
+"
+"1","
+C5.0 [Release 2.07 GPL Edition]  	Tue Dec 19 17:20:43 2023
+-------------------------------
+
+Class specified by attribute `outcome'
+
+Read 3494 cases (17 attributes) from undefined.data
+
+Decision tree:
+
+poutcome = success: yes (217/28)
+poutcome in {failure,other,unknown}:
+:...duration <= 305:
+    :...pdays > 373:
+    :   :...duration <= 128: no (7/1)
+    :   :   duration > 128: yes (18/2)
+    :   pdays <= 373:
+    :   :...age > 60:
+    :       :...duration <= 143: no (23/4)
+    :       :   duration > 143:
+    :       :   :...contact = unknown: yes (0)
+    :       :       contact = telephone: no (6/2)
+    :       :       contact = cellular:
+    :       :       :...marital in {divorced,married}: yes (31/4)
+    :       :           marital = single: no (2)
+    :       age <= 60:
+    :       :...month in {apr,dec,feb,mar,oct,sep}:
+    :           :...duration <= 80: no (60/1)
+    :           :   duration > 80:
+    :           :   :...housing = yes:
+    :           :       :...month in {apr,dec,feb}: no (106/16)
+    :           :       :   month in {mar,oct,sep}: yes (19/6)
+    :           :       housing = no:
+    :           :       :...day > 8: yes (104/39)
+    :           :           day <= 8:
+    :           :           :...month in {apr,feb,oct,sep}: no (49/9)
+    :           :               month in {dec,mar}: yes (8/1)
+    :           month in {aug,jan,jul,jun,may,nov}:
+    :           :...poutcome = other:
+    :               :...month in {aug,jun}: yes (14/3)
+    :               :   month in {jan,jul,may,nov}: no (57/5)
+    :               poutcome in {failure,unknown}:
+    :               :...month in {aug,jul,may}: no (1142/39)
+    :                   month in {jan,jun,nov}:
+    :                   :...day > 15: no (305/10)
+    :                       day <= 15:
+    :                       :...contact in {cellular,
+    :                           :           telephone}: yes (55/16)
+    :                           contact = unknown:
+    :                           :...month in {jan,jun}: no (118/1)
+    :                               month = nov: yes (3)
+    duration > 305:
+    :...duration > 641:
+        :...default = yes: yes (9)
+        :   default = no:
+        :   :...contact in {cellular,telephone}: yes (302/59)
+        :       contact = unknown:
+        :       :...education in {primary,tertiary}: yes (39/7)
+        :           education = unknown:
+        :           :...month = jun: yes (5/1)
+        :           :   month in {apr,aug,dec,feb,jan,jul,mar,may,nov,oct,
+        :           :             sep}: no (3)
+        :           education = secondary:
+        :           :...housing = no: yes (11/1)
+        :               housing = yes:
+        :               :...marital = divorced: no (4/2)
+        :                   marital = single: yes (19/7)
+        :                   marital = married:
+        :                   :...duration <= 1083: no (17/2)
+        :                       duration > 1083: yes (9/2)
+        duration <= 641:
+        :...contact = unknown:
+            :...default = no: no (163/20)
+            :   default = yes: yes (4/1)
+            contact in {cellular,telephone}:
+            :...month in {dec,jun,mar,oct,sep}: yes (72/6)
+                month in {apr,aug,feb,jan,jul,may,nov}:
+                :...age > 59:
+                    :...poutcome = other: no (2/1)
+                    :   poutcome = unknown: yes (28/2)
+                    :   poutcome = failure:
+                    :   :...job in {admin.,entrepreneur,management,retired,
+                    :       :       self-employed,services,student,technician,
+                    :       :       unemployed,unknown}: no (4)
+                    :       job in {blue-collar,housemaid}: yes (3)
+                    age <= 59:
+                    :...housing = yes:
+                        :...month in {apr,feb,jan,jul,nov}: no (125/26)
+                        :   month in {aug,may}:
+                        :   :...job in {entrepreneur,housemaid,technician,
+                        :       :       unknown}: yes (19/5)
+                        :       job in {retired,self-employed,student,
+                        :       :       unemployed}: no (10/2)
+                        :       job = admin.:
+                        :       :...balance <= 110: no (2)
+                        :       :   balance > 110: yes (6)
+                        :       job = blue-collar:
+                        :       :...duration <= 497: no (12/1)
+                        :       :   duration > 497: yes (11/1)
+                        :       job = management:
+                        :       :...duration <= 566: no (15/4)
+                        :       :   duration > 566: yes (6)
+                        :       job = services:
+                        :       :...balance <= -20: yes (4/1)
+                        :           balance > -20: no (6)
+                        housing = no:
+                        :...month = apr: yes (28/2)
+                            month in {aug,feb,jan,jul,may,nov}:
+                            :...loan = yes:
+                                :...marital = married: no (14)
+                                :   marital in {divorced,single}:
+                                :   :...duration <= 463: no (8/1)
+                                :       duration > 463: yes (6)
+                                loan = no:
+                                :...job in {housemaid,unknown}: yes (11/4)
+                                    job = services: no (15/6)
+                                    job = admin.:
+                                    :...campaign <= 4: no (13/4)
+                                    :   campaign > 4: yes (4)
+                                    job = blue-collar:
+                                    :...marital in {divorced,
+                                    :   :           single}: no (7/1)
+                                    :   marital = married: yes (8/2)
+                                    job = entrepreneur:
+                                    :...month in {aug,feb,jan,nov}: no (3)
+                                    :   month in {jul,may}: yes (3)
+                                    job = retired:
+                                    :...age <= 57: yes (6/1)
+                                    :   age > 57: no (3)
+                                    job = self-employed:
+                                    :...balance <= 1558: no (8/2)
+                                    :   balance > 1558: yes (4)
+                                    job = student:
+                                    :...month in {aug,jan,jul,may,
+                                    :   :         nov}: yes (8)
+                                    :   month = feb: no (2)
+                                    job = technician:
+                                    :...duration <= 464: no (20/7)
+                                    :   duration > 464: yes (13/1)
+                                    job = unemployed:
+                                    :...balance <= 674: no (2)
+                                    :   balance > 674: yes (3)
+                                    job = management:
+                                    :...poutcome = other: no (3)
+                                        poutcome = failure:
+                                        :...age <= 45: no (2)
+                                        :   age > 45: yes (2)
+                                        poutcome = unknown:
+                                        :...education = primary: yes (2)
+                                            education in {secondary,
+                                            :             unknown}: no (3/1)
+                                            education = tertiary:
+                                            :...day <= 7: yes (5)
+                                                day > 7:
+                                                :...month in {aug,
+                                                    :         jul}: no (20/6)
+                                                    month in {feb,
+                                                    :         may}: yes (4)
+                                                    month = jan:
+                                                    :...day <= 21: yes (2)
+                                                    :   day > 21: no (3)
+                                                    month = nov: [S1]
+
+SubTree [S1]
+
+campaign <= 2: no (3)
+campaign > 2: yes (2)
+
+
+Evaluation on training data (3494 cases):
+
+	    Decision Tree   
+	  ----------------  
+	  Size      Errors  
+
+	    82  376(10.8%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	  2193   202    (a): class no
+	   174   925    (b): class yes
+
+
+	Attribute usage:
+
+	100.00%	poutcome
+	 93.79%	duration
+	 74.79%	month
+	 74.27%	age
+	 60.88%	pdays
+	 38.81%	contact
+	 22.95%	housing
+	 19.49%	day
+	 16.74%	default
+	  8.07%	job
+	  6.07%	loan
+	  4.32%	education
+	  3.58%	marital
+	  1.00%	balance
+	  0.63%	campaign
+
+
+Time: 0.0 secs
+"
+"1","
+"
+"0","plot(model2)"

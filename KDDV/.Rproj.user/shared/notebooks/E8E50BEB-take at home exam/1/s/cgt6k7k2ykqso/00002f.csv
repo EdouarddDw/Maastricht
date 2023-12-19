@@ -1,0 +1,2 @@
+"0","numeric_data <- select_if(my_data, is.numeric)"
+"0","numeric_data"

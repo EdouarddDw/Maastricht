@@ -1,0 +1,123 @@
+# Load the adult data set:
+adult <- read.csv("C:/.../adult.txt", stringsAsFactors = TRUE)
+
+install.packages(c("rpart", "rpart.plot", "C50"))
+library("tidyverse")
+library("rpart"); library("rpart.plot"); library("C50")
+
+# What are the 3 key differences between CART and C5.0?
+# Describe also briefly the underlying algorithms for creating the splits
+
+# More information on rpart.plot can be found at http://www.milbo.org/rpart-plot/prp.pdf
+
+# Show the structure of data set:
+str(adult)
+View(adult)
+
+
+#################################################################################
+## Data preparation for decision tree models
+#################################################################################
+
+# Categorical variables:
+cat <- c("race", "sex", "workclass", "marital.status", "income")
+
+summary(adult$income)
+
+# Continuous variables:
+con <- c("age", "education.num", "capital.gain", "capital.loss", "hours.per.week")
+
+# Collapse some of the categories by giving them the same factor label
+levels(adult$marital.status)
+levels(adult$workclass)
+levels(adult$marital.status)[2:4] <- "Married"
+levels(adult$workclass)[c(2,3,8)] <- "Gov"
+levels(adult$workclass)[c(5,6)] <- "Self"
+
+levels(adult$marital.status)
+levels(adult$workclass)
+
+# Normalize the numeric variables on the unit scale with a function 
+# and the use of the "pipe" operator %>%
+normalize <- function(x){
+  rng <- range(x,na.rm = TRUE)
+  (x - rng[1]) / (rng[2] - rng[1])
+}
+
+adult <- adult %>% mutate(     
+  age.MM = normalize(age),
+  education.num.MM = normalize(education.num),
+  capital.gain.MM = normalize(capital.gain),
+  capital.loss.MM = normalize(capital.loss),
+  hours.per.week.MM = normalize(hours.per.week))
+
+
+# Note: NORMALIZATION or STANDARDIZATION of the predictor variables is not required for 
+# actual use of the algorithms as the splits are not sensitive to this. 
+
+#################################################################################
+## CART
+#################################################################################
+
+# Use predictors to classify whether or not a person's income is less than $50K
+cartfit <- rpart(income ~ age.MM + education.num.MM + capital.gain.MM + capital.loss.MM +
+                   hours.per.week.MM + race + sex + workclass + marital.status,
+                 data = adult,
+                 method = "class")
+print(cartfit)
+
+# How do we read the output? What is the sequence to follow?
+# What is the meaning of the numbers in 
+# "1) root 25000 5984 <=50K. (0.76064000 0.23936000)" ? 
+
+# First 10 model predictions
+p1 <- predict(cartfit, adult[1:10,])
+p1
+
+# Plot the decision tree
+rpart.plot(cartfit)  # default settings
+
+# Customized settings
+rpart.plot(cartfit, type = 3, box.palette = c("red", "green"), fallen.leaves = TRUE)
+
+# Generating the full set of decision rules for the CART decision tree
+install.packages("rattle")
+library(rattle)
+
+asRules(cartfit)
+rpart.rules(cartfit)
+
+# What is the confidence level and where can we find it in the output?
+
+
+#################################################################################
+## C5.0
+#################################################################################
+
+# Put the predictors into 'x', the response into 'y'
+names(adult)
+predictors <- adult[,c(2, 6, 9, 10, 16, 17, 18, 19, 20)]
+dependence <- adult$income
+c50fit <- C5.0(x = predictors, y = dependence)
+c50fit
+summary(c50fit)
+plot(c50fit)
+
+# What is the importance of the predictors in the model building / splits? 
+# Where can we find this information?
+
+# All model predictions
+p2 <- predict(c50fit, predictors)
+p2
+
+# Generating the full set of decision rules for the C5.0 decision tree
+c50fit <- C5.0(x = predictors, y = dependence, rules = TRUE)
+summary(c50fit)
+
+# The lift in the output represents the improvement that the decision rule provides 
+# when compared against a random guess.
+# A decision rule is doing a good job if the response within the target 
+# is much better than the average for the population as a whole. 
+# Lift is simply the ratio of these values: target response divided by average response.
+# The higher the lift, the better the decision rule. 
+

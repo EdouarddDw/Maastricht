@@ -1,0 +1,6 @@
+"0","#training and testing data"
+"0","splitIndex <- createDataPartition(my_data_filtered$y, p = 0.7, list = FALSE)"
+"0",""
+"0","# Creating training and testing datasets"
+"0","trainData <- my_data_filtered[splitIndex, ]"
+"0","testData <- my_data_filtered[-splitIndex, ]"

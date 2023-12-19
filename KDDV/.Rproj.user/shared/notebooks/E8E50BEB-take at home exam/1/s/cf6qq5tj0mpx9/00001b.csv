@@ -1,0 +1,7 @@
+"0","my_data %>% ggplot() + "
+"0","  geom_bar(aes(poutcome,fill=y),position=""fill"") +"
+"0","  scale_x_discrete( ""poutcome"" ) + "
+"0","  scale_y_continuous( ""Percent"" ) + "
+"0","  guides(fill = guide_legend( title = ""subscribed a term deposit?"" ) ) + "
+"0","  scale_fill_manual( values = c( ""tomato"", ""skyblue3"" ) )"
+"0",""

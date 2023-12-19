@@ -1,0 +1,799 @@
+---
+title: "Housing Dataset Analysis"
+author: "Juliusz Glodek"
+date: "2022-12-21"
+output: html_document
+---
+
+```{r setup, include=FALSE, warning=FALSE, message=FALSE}
+library(ggplot2)
+library("data.table")
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(C50)
+library(tidyverse)
+library(caret)
+library(kknn)
+```
+
+# Exploratory Data Analysis
+
+## Prelimenary steps:
+
+Firstly, the dataset was loaded into a data frame. Afterwards, per requirements of the task, a random subset of 480 observations was taken. Notice that since the variable names were not given in the original file, they had to be added in manually.  
+
+``` {r, error=FALSE, warning=FALSE, echo=T, results='hide'} 
+#may turn out the echo=T is bad
+housing.nonames <- read.csv(file = "housing.csv", sep=";" , stringsAsFactors=TRUE, header = FALSE)
+set.seed(11)
+vector_names = c('CRIM', 'ZN', 'INDUS', 'CHAS', 'NOX', 'RM', 'AGE', 'DIS', 'RAD', 'TAX', 'PTRATIO', 'B', 'LSTAT', 'MEDV')
+housing <- housing.nonames[sample(nrow(housing.nonames), size = 480),]
+housing <- `colnames<-`(housing, vector_names)
+```
+
+
+Then, in order to get a feel for the data, we look at the structure, summary and the first ten observations in the data set:
+
+``` {r}
+print(str(housing))
+show(summary(housing))
+housing10 <- housing[1:10,] # probably useless
+show(housing10)
+```
+
+Firstly, let us analyze the structure of the data set. It would seem that of the 14 variables, all except the binary indicator *Chas*, are numeric. Furthermore, all the numeric variables seem continuous, even tough the output suggests that *RAD* (index of access to radial highways) and *TAX* (full value property tax rate per 10000$) are discrete, they are measured on a continuous scale. Such a heavy emphasis on numeric data points us in the direction of regression based models, or a model which relies on numeric inputs, such as the K-nearest-neighbors algorithm. The target variable in the datset is *MEDV* - median value of owner occupied homes per observation (each observation represents a suburb town). 
+
+
+% write that uneven distribution in zn and in chas
+
+### Checking for anomalous fields:
+
+Firstly, we will check whether any of the fields are missing:
+
+``` {r}
+missing <- is.na(housing) 
+sum(missing[missing == TRUE])
+```
+
+From this we can clearly see that no fields in the dataset are missing. 
+
+Looking yet again at the structure and the summary of the data set, it seems clear that there are no anomalous fields within the dataset as a whole. All the numeric variables seem to have ranges that could accurately represent the underlying distribution, and it seems that no categorical variable has missing levels (which would be denoted by a symbol such as "?").
+
+Without taking outliers into acount, we can conclude that the dataset doesn't seem to have any anomalous fields.
+
+-----
+
+## Looking closer at the variables:
+
+### The target - *MEDV*
+
+``` {r, echo=FALSE}
+ggplot(housing) + geom_histogram(bins=30, mapping = aes(x = MEDV)) + scale_x_continuous('Median Home Value (10,000$)') + scale_y_continuous('Count') +  guides(guide_legend(title='Distribution of the target variable')) + theme( axis.text= element_text (size=9), axis.title = element_text (size=16, face= "bold" ))
+
+
+```
+
+As seen above, the distribution of the final grade seems to be somewhat unimodal and right skewed, roughly centered around 21, with a significant number of extremely high values, which at a first glance seem likely to be outliers. This suggests that we have to look into outliers. This will be done using the method based on Inter Quantile Range. This is since IQR, when compared to Z-score, which is based on mean and standard deviation, is a much more robust measure. 
+
+The below function provides a list of outliers:
+
+``` {r echo=T, results='hide'}
+show(boxplot(housing$MEDV)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+```
+This will be visualized below:
+
+``` {r, echo = FALSE}
+MEDV <- housing$MEDV
+boxplot(MEDV,horizontal=TRUE, range=1.5, main =substitute(paste("Box plot of ",italic('Median House Value'))))
+text(x=5.6,labels=5.6,y=1.2) 
+text(x=36.5,labels=36.5,y=1.2) 
+```
+
+Clearly, the result matches what we saw on the chart, with many of the extremely high values being classified as outliers. The graph includes labels for the cutoff points for what values are considered outliers. As wee can see, there is significantly more outliers over the value of 36.5 then those lower than 5.6. This does not seem to stem from sampling or data entry errors, but rather represent the actual data distribution for *MEDV*, this is a really interesting trend to explore, hence the data will be binned wih the boundary set at the upper outlier cutoff - 36.5. Due to the extremely low number of observations under 5.6 - `r length(housing$MEDV[housing$MEDV < 5.6])`, it is too insignificant to consider. 
+
+### Binning the target variable
+
+We will bin the target into two categories - "High" (MEDV > 36.5) and "Normal", which will include all the other observations. 
+
+```{r, warning=FALSE, message=FALSE}
+MEDV_bin <- ifelse(housing$MEDV > 36.5, "High", "Normal")
+head(MEDV_bin)
+```
+We see that the two bins were succesfully applied to the target variable. The proportion of "High" observations is `r length(MEDV_bin[MEDV_bin == "High" ])/length(MEDV_bin)`. 
+
+Now that the target variable is binned, we can examine its relationships with the predictor variables.
+
+---------
+## **The Predictors**
+
+% remember change labels
+
+### **CRIM** - per capita crime rate by town
+
+``` {r}
+boxplot.stats(housing$CRIM)$out
+
+show(boxplot(housing$CRIM)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$CRIM,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Crime Rate per capita'))))
+text(x=1.6,labels=0.00632,y=1.3) #value mdified so that it can fit properly
+text(x=8.98296,labels=8.98296,y=0.8) 
+```
+
+Histograms:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(CRIM, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Normalized Histogram:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(CRIM, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Correlation:
+
+``` {r}
+cor.test(housing$MEDV, housing$CRIM)
+```
+
+### **ZN** - proportion of residential land zoned for lots over 25,000 ft.
+
+
+``` {r}
+boxplot.stats(housing$ZN)$out
+
+show(boxplot(housing$ZN)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$ZN,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Crime Rate per capita'))))
+text(x=0,labels=0,y=1.3) #value mdified so that it can fit properly
+text(x=40,labels=40,y=1.2) 
+```
+
+Histograms:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(ZN, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Normalized Histogram:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(ZN, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Correlation:
+
+``` {r}
+cor.test(housing$ZN, housing$MEDV)
+```
+
+### **INDUS** - proportion of non-retail business acres per town
+
+``` {r}
+boxplot.stats(housing$INDUS)$out
+
+show(boxplot(housing$INDUS)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+no outliers
+
+
+``` {r, echo=FALSE}
+boxplot(housing$INDUS,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Crime Rate per capita'))))
+ 
+```
+
+Histograms:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(INDUS, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Normalized Histogram:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(INDUS, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Correlation:
+
+``` {r}
+cor.test(housing$MEDV, housing$INDUS)
+```
+
+### **NOX** - per capita crime rate by town
+
+``` {r}
+boxplot.stats(housing$NOX)$out
+
+show(boxplot(housing$NOX)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$NOX,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Crime Rate per capita'))))
+
+```
+
+Histograms:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(NOX, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Normalized Histogram:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(NOX, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Correlation:
+
+``` {r}
+cor.test(housing$NOX, housing$MEDV)
+```
+
+### **RM** - per capita crime rate by town
+
+``` {r}
+boxplot.stats(housing$RM)$out
+
+show(boxplot(housing$RM)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$RM,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Crime Rate per capita'))))
+text(x=4.880,labels=4.880,y=1.2) #value mdified so that it can fit properly
+text(x=7.691,labels=7.691,y=1.2) 
+```
+
+Histograms:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(RM, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Normalized Histogram:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(RM, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Correlation:
+
+``` {r}
+cor.test(housing$RM, housing$MEDV)
+```
+
+### **AGE** - per capita crime rate by town
+
+``` {r}
+boxplot.stats(housing$AGE)$out
+
+show(boxplot(housing$AGE)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$AGE,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Crime Rate per capita'))))
+```
+
+Histograms:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(AGE, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Normalized Histogram:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(AGE, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Correlation:
+
+``` {r}
+cor.test(housing$MEDV, housing$AGE)
+```
+
+### **DIS** - per capita crime rate by town
+
+``` {r}
+boxplot.stats(housing$DIS)$out
+
+show(boxplot(housing$DIS)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$DIS,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Crime Rate per capita'))))
+text(x=1.3296,labels=1.1296,y=1.2) #value mdified so that it can fit properly
+text(x=9.2229,labels=9.2229,y=1.2) 
+```
+
+Histograms:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(DIS, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Normalized Histogram:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(DIS, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Correlation:
+
+``` {r}
+cor.test(housing$MEDV, housing$DIS)
+```
+
+### **RAD** - per capita crime rate by town
+
+``` {r}
+boxplot.stats(housing$RAD)$out
+
+show(boxplot(housing$RAD)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$RAD,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Crime Rate per capita'))))
+ 
+```
+
+Histograms:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(RAD, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Normalized Histogram:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(RAD, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Correlation:
+
+``` {r}
+cor.test(housing$MEDV, housing$RAD)
+```
+
+### **TAX** - per capita crime rate by town
+
+``` {r}
+boxplot.stats(housing$TAX)$out
+
+show(boxplot(housing$TAX)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$TAX,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Crime Rate per capita'))))
+```
+
+Histograms:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(TAX, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Normalized Histogram:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(TAX, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Proportion") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Correlation:
+
+``` {r}
+cor.test(housing$TAX, housing$MEDV)
+```
+
+### **PTRATIO** - per capita crime rate by town
+
+``` {r}
+boxplot.stats(housing$PTRATIO)$out
+
+show(boxplot(housing$PTRATIO)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$PTRATIO,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Crime Rate per capita'))))
+text(x=13.6,labels=13.6,y=1.2) #value mdified so that it can fit properly
+text(x=22.0,labels=22.0,y=1.2) 
+```
+
+Histograms:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(PTRATIO, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Normalized Histogram:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(PTRATIO, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Correlation:
+
+``` {r}
+cor.test(housing$PTRATIO, housing$MEDV)
+```
+
+### **B** - per capita crime rate by town
+
+``` {r}
+boxplot.stats(housing$B)$out
+
+show(boxplot(housing$B)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$B,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Crime Rate per capita'))))
+text(x=344.91,labels=344.91,y=1.3) #value mdified so that it can fit properly
+text(x=396.90,labels=396.90,y=0.7) 
+```
+
+Histograms:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(B, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Normalized Histogram:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(B, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Correlation:
+
+``` {r}
+cor.test(housing$MEDV, housing$B)
+```
+
+### **LSTAT** - per capita crime rate by town
+
+``` {r}
+boxplot.stats(housing$LSTAT)$out
+
+show(boxplot(housing$LSTAT)$stats[c(1, 5),]) #check how to make graph disappear, consider other action
+
+```
+
+``` {r, echo=FALSE}
+boxplot(housing$LSTAT,horizontal=TRUE, main =substitute(paste("Box plot of ",italic('Crime Rate per capita'))))
+text(x=1.73,labels=1.73,y=1.3) #value mdified so that it can fit properly
+text(x=30.81,labels=30.81,y=0.8) 
+```
+
+Histograms:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(LSTAT, fill=MEDV_bin)) + geom_histogram(bins=30, position="stack", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Normalized Histogram:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(housing, aes(LSTAT, fill=MEDV_bin)) + geom_histogram(bins=30, position="fill", col="white") + scale_x_continuous("Crime Rate per capita") + scale_y_continuous("Count") + theme(axis.text=element_text(size=10), axis.title=element_text(size=16,face="bold")) + guides(fill=guide_legend(title='Result'))
+```
+
+Correlation:
+
+``` {r}
+cor.test(housing$LSTAT, housing$MEDV)
+```
+
+
+
+
+
+
+### **CHAS** - Charles River dummy variable
+
+``` {r, echo=FALSE, message=FALSE}
+counts.CHAS <- table(MEDV_bin, housing$CHAS, dnn=c("Result", "CHAS dummy variables"))
+sumtable.CHAS <- addmargins(counts.CHAS , margin = seq_along(dim(counts.CHAS)), FUN = sum, quiet = TRUE)
+sumtable.CHAS
+
+col.margin.CHAS <- round(prop.table(counts.CHAS,
+margin = 2),
+4)
+col.margin.CHAS
+```
+It seems that being single yields slightly better educational results - possibly because singles have more time to devote to studying. 
+
+``` {r, echo=FALSE}
+ggplot() + geom_bar(data=housing, 
+              aes(x=factor(housing$CHAS),
+              fill=factor(MEDV_bin)),
+              position='stack')+
+              scale_x_discrete('CHAS dummy value') +
+              scale_y_continuous('Count') +
+              guides(fill=guide_legend(title='Result'))+
+              theme(axis.text=element_text(size=10), 
+                    axis.title=element_text(size=16,face="bold")) 
+```
+
+Normalized Bar chart:
+
+``` {r, echo=FALSE}
+ggplot() + geom_bar(data=housing, 
+              aes(x=factor(housing$CHAS),
+              fill=factor(MEDV_bin)),
+              position='fill')+
+              scale_x_discrete('CHAS dummy value') +
+              scale_y_continuous('Proportion') +
+              guides(fill=guide_legend(title='Median House Value'))+
+              theme(axis.text=element_text(size=10), 
+                    axis.title=element_text(size=16,face="bold")) 
+```
+
+------
+
+## Checking for correlation between the numerical variables:
+
+A scatter plot matrix is shown below, where the numerical variables are listed in order of their appearance in the set. 
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.dim = c(20, 20)}
+numerical_pairs <- cbind(CRIM = housing$CRIM, ZN = housing$ZN, INDUS = housing$INDUS, NOX = housing$NOX, RM = housing$RM, AGE = housing$AGE, DIS = housing$DIS, RAD = housing$RAD, TAX = housing$TAX, PTRATIO = housing$PTRATIO, B = housing$B, LSTAT = housing$LSTAT)
+
+pairs(numerical_pairs, panel=panel.smooth)
+```
+
+The red lines represent the smoothest possible trend lines that could be fit over the scatterplots. Due to the sheer number of variables in the dataset, this figure is difficult to read as part of a document, however it is still useful as it provides a visual overwiew of the relationships between each of the numeric variables. For instance, it is instantly clear that First and Second Period grades are highly correlated.      
+
+A table of correlation coefficients is provided below:
+
+``` {r, echo=FALSE}
+correlations_table <- as.table(cor(numerical_pairs))
+show(correlations_table) 
+```
+
+As seen in the table, there clealry are numerical variables in the dataset that are highly correlated. The code below finds the highest positive and negative correlations in the table:
+
+``` {r}
+max(correlations_table[correlations_table != 1])
+min(correlations_table[correlations_table != 1])
+```
+point for cutoff - 0.65, maybe 0.7 - 
+
+correlated variables in order of strength:
+- RAD TAX - najgorsze
+
+- AGE NOX
+
+- NOX DIS
+
+- INDUS NOX na pewno
+
+- INDUS NIS pewno
+
+- INDUX TAXpwno
+
+- ZN DIS moze
+
+Dobrze ze LSTAT nie
+
+% edit
+
+Firstly, lets look at negative correlations. The strongest negative correlation has a coefficient of -0.39, which is a relatively low value in normal applications, however for a dataset as large as the **student.csv**, it may prove statistically significant. This correlation exists between Second Period grades and the Number of Failures. A negative correlation of -0.36 exists between First Period grades and Failures as well. Nonetheless, those values are below what is normally considered moderately strong (correlation coefficients of magnitude greater than 0.5), therefore no action will be taken. The dataset has a few very strong positive correlations - the highest, at 0.86, exists between First and Second Period Grades, which intuitively makes sense, as students are expected to keep up their prowess through the school year. While it is not a perfect correlation, it is a very strong one, and may be grounds to omit either *g1* or *g2* when models are to be created. Other strong correlations in the set are between both of the parents education level (0.64) and weekend/weekday alcohol consumption (0.62), both of which intuitively make sense, as one can reasonably expect people to choose partners of a similar education level and that individuals who drink during the weekend would also do so for the rest of the week. Though some strong correlations were found in the data, none of them are stong enough to indicate that any variables should be omitted. Nonetheless, the variables outlined here should be carefully monitored and preferably processed with dimension reduction methods before any model building. 
+
+-----
+
+% edit
+
+#Summary:
+
+## Categorical variables:
+
+1. The school of the student seems to be a really effective predictor of whather a student passes the exam, with students from the *Gabriel Pereira* high school having much better results than their peers from the other highschool.
+
+2. Gender has some predictive power, with Females achieving better results than males
+
+3. Students from Urban areas achieve much better results than their counterparts from rural areas
+
+4. Students with mother's working in the health and especially teaching achieve better results, while those with stay at home moms have results comparatively worse than the base rate
+
+5. The father's job is also a good predictor for the target, with yet again having a parent working in health and teaching fields leads to better final exam results, with other levels for this variable seemingly having no predictive power
+
+6. Surprisingly, reason for choice of school is a very good predictor of the target, with students who guided their choice by reputation scoring much better than those who decided by other factors. Students who decided by the courses offered or other factors scored much worse than baseline, with those deciding to choose the school which is closer to their home doing slightly better. 
+
+7. Clearly, having a parent as a legal guardian leads to better results, with people who have their father as the guardian scoring slightly better than those with their mother.
+
+8. Predictably, having extra educational support leads to slightly better final results
+
+9. Interestingly, having extra, paid lessons seems to indicate worse results
+
+10. Desire to pursue higher education is one of the most effective predictors of the final result, with students who have no desire to pursue higher education scoring much worse than those that do
+
+11. Students with at-home access to the internet score better than those without 
+
+12. Students who are not in a romantic relationship achieve slightly better results than those that do.
+
+All other categorical variables seemed to be little related to the target. 
+
+## Numerical variables:
+
+Though outliers were observed in nearly every numerical variable, all were deemed "natural" (true) outliers - outliers that result from natural variation in data. The findings from the EDA regarding numerical variables are presented below:
+
+1. Studying more (for more hours) seems to roughly correspond to better results
+
+2. Failing more times corresponds to worse results, though there's little instances in the data set that fail even once, hence the validity of this relationship is in question
+
+3. Students who have more freetime seem to score slightly worse than their peers
+
+4. Students who consume more alcohol during the week, have a greater probability of failing the exam
+
+5. Students who consume more alcohol during the weekend also have a greater probability of failing the exam
+
+6. Students who achieved at least a 5(in the dutch scale) in the first period exam seem to fail at a substantially lower rate then their peers
+
+7. Students who achieved at least a 5(in the dutch scale) in the second period exam seem to fail at a substantially lower rate then their peers
+
+other numeric variables in the datset do not seem to provide much information on the target
+
+## Further insights for modelling
+
+The following variables should be defenitely included in any model predicting/ classifying the final exam result, owing to their effect size on the target:
+
+- School
+- Adress
+- Mother's job
+- Father's job
+- Reason
+- Internet Access
+- Weekday alcohol consumption
+- Weekend Alcohol consumption
+- First period exam 
+- Second period exam
+
+The other variables listed in the summary but not outlined here also provide information on the target, but to a much lesser extent
+
+------ 
+
+# **Model Building**
+
+## **Spliting the Data**
+
+
+Since the target is binned, we replace the column corresponding with the target variable with the vector containing the binned values.
+
+``` {r, echo=FALSE} 
+housing.model <- replace(housing, c(14), as.factor(MEDV_bin))
+
+str(housing.model)
+```
+
+In order to properly test the model and to avoid over fitting, the data set will be split into a training and a hold out set. The data was split with a ratio of 4:1 as this split ensures that both the training and the testing subset represent the overall population. Other ratios were also tested, but only the best result will be presented. The code that achieves this can be seen below:
+
+``` {r} 
+set.seed(111)
+train_rows <- sample(nrow(housing.model), nrow(housing.model) * 0.8)  
+housing_train <- housing.model[train_rows, ]
+housing_test <- housing.model[-train_rows, ]
+``` 
+
+### **Testing the split**
+
+### **MEDV**  - the target
+
+``` {r, echo = FALSE}
+length(housing_train$MEDV[housing_train$MEDV == "High"])
+length(housing_test$MEDV[housing_test$MEDV == "High"])
+
+prop.test( x = c(26,11) , n=  c(384,96), alternative = "two.sided", correct = FALSE)
+```
+
+We must ensure that the proportion of the target variable in each split does not differ significantly. For binary variables, a Z-test is used:
+
+### **CHAS
+
+``` {r, echo = FALSE}
+length(housing_train$CHAS[housing_train$CHAS == "1"])
+length(housing_test$CHAS[housing_test$CHAS == "1"])
+
+prop.test( x = c(28,7) , n=  c(384,96), alternative = "two.sided", correct = FALSE)
+```
+
+### **CRIM**
+
+For continuous variables, a t-test for the difference in means is used to verify that the distribution is approximately equal between the two subsets.
+
+``` {r}
+t.test(housing_train$CRIM, housing_test$CRIM)
+```
+
+### **ZN**
+
+``` {r}
+t.test(housing_train$ZN, housing_test$ZN)
+```
+
+### **INDUS**
+
+``` {r}
+t.test(housing_train$INDUS, housing_test$INDUS)
+```
+
+### **NOX**
+
+``` {r}
+t.test(housing_train$NOX, housing_test$NOX)
+```
+
+### **RM**
+
+``` {r}
+t.test(housing_train$RM, housing_test$RM)
+```
+
+### **AGE**
+
+``` {r}
+t.test(housing_train$AGE, housing_test$AGE)
+```
+
+### **DIS**
+
+``` {r}
+t.test(housing_train$DIS, housing_test$DIS)
+```
+
+### **RAD**
+
+``` {r}
+t.test(housing_train$RAD, housing_test$RAD)
+```
+
+### **TAX**
+
+``` {r}
+t.test(housing_train$TAX, housing_test$TAX)
+```
+
+### **PTRATIO**
+
+``` {r}
+t.test(housing_train$PTRATIO, housing_test$PTRATIO)
+```
+
+### **B**
+
+``` {r}
+t.test(housing_train$B, housing_test$B)
+```
+
+### **LSTAT**
+
+``` {r}
+t.test(housing_train$LSTAT, housing_test$LSTAT)
+```
+
+% come back later, comment, maybe try some more to get the perfect split
+
+
+
+
+
+
+
+
+
