@@ -1,0 +1,164 @@
+---
+title: "assignement 1"
+author: "Edouard Dewaerheijd (I6341571)"
+date: "2024-01-15"
+output: html_document
+---
+# setup
+```{r}
+library(tidyverse)
+library(datasauRus)
+library(gapminder)
+```
+
+
+# Question 3
+
+Install the datasauRus package, which contains the data set “datasaurus_dozen”. Check its
+structure and then do the following :
+```{r}
+#create dataset and quick overview
+my_data <- datasaurus_dozen
+#view(my_data)
+head(my_data)
+```
+
+
+## 1) Compute the mean of x, mean of y, standard deviation of x, standard deviation of y,
+and correlation between x and y, grouped by data set. Make use of the dplyr package
+in your code. Are there any differences between the 13 data sets?
+
+```{r}
+# get each stat for each of the datasets
+stats <- my_data %>%
+  group_by(dataset) %>%
+  summarise(
+    mean_x = mean(x),
+    mean_y = mean(y),
+    sd_x = sd(x),
+    sd_y = sd(y),
+    correlation = cor(x, y)
+  )
+#print all stats in a table format
+print(stats)
+```
+
+We created a summary table with the mean and the standart divation of x and y and also the correlation between x and y. We did this using the summaries function of the dplyr library.
+
+## 2) Make a scatterplot of x against y for each data set using the ggplot2 package.
+Explain/describe your code in detail. Are there any differences between the 13 data
+sets?
+
+```{r}
+#plot x and y for each dataset
+ggplot(datasaurus_dozen, aes(x = x, y = y)) + 
+  geom_point() +
+  facet_wrap(~ dataset, scales = "free") +    # Create separate plots for each dataset
+  theme_minimal() +
+  labs(title = "Scatterplots of x vs y in Datasaurus Dozen", 
+       x = "X value", 
+       y = "Y value") 
+```
+we plotted x against y for each dataset ussing ggplot 2.
+
+# Exercice 4
+
+Install the gapminder package, which contains the data set “gapminder”.
+The gapminder data set includes data on life expectancy, population, and GDP per capita of
+different countries for different years
+
+## 2) Read in the data set and obtain the overview
+```{r}
+#renaming the data set
+my_data <- gapminder
+
+#view(my_data)
+head(my_data)
+```
+We got a basic overview of this dataset using the "head" function in R allowing us to see the 6 first rows of the dataset.
+
+## 3) Obtain the average life expectancy for each continent for each year. Make use of the
+the dplyr package in your code
+```{r}
+avg_life_expectancy <- my_data %>%
+  group_by(continent, year) %>%
+  summarise(average_lifeExp = mean(lifeExp))
+print(avg_life_expectancy)
+```
+
+using the "summarise" and "group_by" functions of the dplyr library we created a table giving us the the average life expectancy per continent per year.
+
+## 4) Calculate the maximum, minimum and mean for life expectancy, population and GDP
+per capita for each year. In first instance, do this at length, in the long way, and in
+second instance, make use of the across() function. In both ways, make use of the
+dplyr package in your code.
+
+```{r}
+gapminder_stats_across <- my_data %>%
+  group_by(year) %>%
+  summarise(
+    across(c(lifeExp, pop, gdpPercap),
+           list(max = max, min = min, mean = mean))
+  )
+
+print(gapminder_stats_across)
+```
+
+we calculates and printed the yearly maximum, minimum, and mean for life expectancy, population, and GDP per capita in this dataset using dplyr, with the across function applying these statistics to each column.
+
+## 5) Obtain the country with the highest life expectancy by continent and year. Make use
+of the slice_max() function and the dplyr package in your code.
+
+```{r}
+highest_life_expectancy <- my_data %>%
+  group_by(year, continent) %>%
+  slice_max(order_by = lifeExp, n = 1)
+
+print(highest_life_expectancy)
+```
+We proceeded to find the country with the highest life expectancy by conitinent using the "Slice_max" and "group_by" functions from the dplyr library.
+
+## Obtain a random sample that represents 1% of all observations. Make use of the
+slice_sample() function and the dplyr package in your code.
+```{r}
+#find what 1% of the sample represents and round it off 
+sample_size <- round(nrow(my_data) * 0.01)
+
+# create a random sample representing 1% of all observations
+random_sample <- my_data %>%
+  slice_sample(n = sample_size)
+print(random_sample)
+```
+We created a random sample representing 1% off observations by calculating what 1% of the number of rows is and rounding off that number because we can't creat a random sub-sample with a number with decimals. We proceeded to create this subset using the "slice_sample" funtion of dplyr.
+
+
+## 7) Modify the variable name for life expectancy as “life_expectancy”. Make use of the
+the dplyr package in your code.
+```{r}
+# Rename the lifeExp variable to "life_expectancy"
+gapminder_renamed <- my_data %>%
+  rename(life_expectancy = lifeExp)
+
+# View the results
+head(gapminder_renamed)
+```
+We modified the "lifeExp" varible to "life_expectancy" using the "rename" function of dplyr.
+
+## 8) Rearrange the data using the pivot_longer() function in the tidyverse package so that
+the variables for life expectancy, population and GDP per capita are combined into a
+single variable in the data set.
+
+```{r}
+gapminder_long <- my_data %>%
+  pivot_longer(
+    cols = c(lifeExp, pop, gdpPercap),
+    names_to = "variable",
+    values_to = "value"
+  )
+
+# View the results
+head(gapminder_long)
+```
+we proceded to trnasform the collums "lifeEXP", "pop", and "gdpPercap" from a wide format in t a long format using the "pivot_longer" function from the dplyr library. This functions consolidates thes three rows in to two one representing the variable and one representing the value of said varible.
+
+
