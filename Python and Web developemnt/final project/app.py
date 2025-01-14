@@ -81,3 +81,34 @@ def signup():
 # Run the Flask app
 if __name__ == "__main__":
     app.run(debug=True)
+
+#start of coding the dahsboard
+
+# Key functionalities checklist:
+#admin dashboard (with more accsees to edit everything) and employee pannel
+#admin can add new employee
+#admin can delete employee
+#admin can edit employee
+#admin can see all employees
+#admin has the opportunity to create other admuins or to change the privilages of the employees
+#employee can see other employees but can't edit them
+#each employee is assigned to a project
+#admin can see all projects and modify them and wich employee is assigned to them
+
+# functionalities summary
+#admin can see all employees
+#admin can see all projects
+#admin can add new employee
+#admin can delete employee
+#admin can edit employee
+#admin can see all employees
+#admin can see all projects
+#admin can see number of hours worked by each employee
+#admin can see number of hours worked by each project
+#admin can see number of hours worked by each employee on each project
+
+#design choices
+#pie charts or something like that
+#each employee has a profile page
+#each project has a profile page
+ 
