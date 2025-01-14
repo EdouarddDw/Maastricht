@@ -1,0 +1,7 @@
+got a couple of ideas:
+- add an estimation of the number of hours a project will take so we can create nice graphs and shit
+
+
+to do:
+add delete-employee feature
+invalide password function works but shows up in the wrong place

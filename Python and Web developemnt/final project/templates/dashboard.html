@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Employee Dashboard</title>
+</head>
+<body>
+    <h1>Employee Dashboard</h1>
+
+    <p>Welcome, {{ current_user.username }}!</p>
+
+    {% if current_user.project %}
+        <!-- If the user is assigned to a project -->
+        <p><strong>Project:</strong> {{ current_user.project.name }}</p>
+        <p><strong>Your Hours Worked:</strong> {{ current_user.hours_worked }}</p>
+
+        <!-- Build a list of co-workers (employees on same project excluding current user) -->
+        {% set co_workers = [] %}
+        {% for e in current_user.project.employees %}
+            {% if e.id != current_user.id %}
+                {% set co_workers = co_workers + [e] %}
+            {% endif %}
+        {% endfor %}
+
+        {% if co_workers %}
+            <!-- If at least one other employee is on this project -->
+            <p>You are working with:
+            {% for cw in co_workers %}
+                {{ cw.username }}{% if not loop.last %}, {% endif %}
+            {% endfor %}
+            </p>
+        {% else %}
+            <!-- If there are no other employees on this project -->
+            <p>You are working alone on this project.</p>
+        {% endif %}
+    {% else %}
+        <!-- If the user is not assigned to any project -->
+        <p>You are currently not assigned to any project.</p>
+    {% endif %}
+</body>
+</html>

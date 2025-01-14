@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Projects{% endblock %}
+
+{% block body %}
+<div class="container">
+    <h2>All Projects</h2>
+    <ul>
+        {% for project in projects %}
+        <li>
+            {{ project.name }} - Total Hours: {{ project.total_hours }}
+            <a href="/edit-project/{{ project.id }}" class="button">Edit</a>
+            <a href="/delete-project/{{ project.id }}" class="button">Delete</a>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endblock %}

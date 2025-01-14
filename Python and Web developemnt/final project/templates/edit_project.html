@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <!-- edit_project.html -->
+<h1>Edit Project</h1>
+<form method="POST">
+  <label for="name">Project Name:</label>
+  <input type="text" name="name" id="name" value="{{ project.name }}" required>
+
+  <label for="description">Description:</label>
+  <textarea name="description" id="description" rows="3">{{ project.description }}</textarea>
+
+  <label for="total_hours">Total Hours:</label>
+  <input type="number" step="0.1" name="total_hours" id="total_hours" value="{{ project.total_hours }}">
+
+  <button type="submit">Save</button>
+</form>
+
+</body>
+</html>
