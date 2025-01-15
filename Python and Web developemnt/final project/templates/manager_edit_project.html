@@ -1,0 +1,31 @@
+<!-- manager_edit_project.html (the template) -->
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Edit Project: {{ proj.name }}</h1>
+<form method="POST">
+    <label for="name">Project Name:</label><br>
+    <input 
+        type="text" 
+        id="name" 
+        name="name" 
+        value="{{ proj.name }}" 
+        required
+    >
+    <br><br>
+
+    <label for="description">Description:</label><br>
+    <textarea 
+        id="description" 
+        name="description" 
+        rows="4" 
+        cols="50"
+    >{{ proj.description }}</textarea>
+    <br><br>
+
+    <button type="submit">Save Changes</button>
+    <a href="{{ url_for('manager_dashboard') }}">
+        <button type="button">Cancel</button>
+    </a>
+</form>
+{% endblock %}

@@ -1,7 +1,9 @@
 got a couple of ideas:
 - add an estimation of the number of hours a project will take so we can create nice graphs and shit
+- log file of modififcations and who did input
+-
 
 
 to do:
-add delete-employee feature
 invalide password function works but shows up in the wrong place
+

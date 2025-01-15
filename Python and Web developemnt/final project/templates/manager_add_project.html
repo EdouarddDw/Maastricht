@@ -1,0 +1,20 @@
+<!-- templates/manager_add_project.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Add New Project</h1>
+
+<form method="POST">
+    <label for="name">Project Name:</label><br>
+    <input type="text" id="name" name="name" required><br><br>
+    
+    <label for="description">Description:</label><br>
+    <textarea id="description" name="description" rows="4" cols="50"></textarea><br><br>
+    
+    <button type="submit">Add Project</button>
+    <a href="{{ url_for('manager_dashboard') }}">
+        <button type="button">Cancel</button>
+    </a>
+</form>
+{% endblock %}
+

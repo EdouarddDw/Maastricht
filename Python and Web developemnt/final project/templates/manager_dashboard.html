@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Manager Dashboard</h1>
+
+<h2>Employees</h2>
+<p><a href="{{ url_for('manager_add_employee') }}">Add Employee</a></p>
+<table border="1">
+    <tr>
+        <th>ID</th>
+        <th>Username</th>
+        <th>Role</th>
+        <th>Project</th>
+        <th>Actions</th>
+    </tr>
+    {% for emp in employees %}
+    <tr>
+        <td>{{ emp.id }}</td>
+        <td>{{ emp.username }}</td>
+        <td>{{ emp.role }}</td>
+        <td>{{ emp.project.name if emp.project else 'None' }}</td>
+        <td>
+            <a href="{{ url_for('manager_edit_employee', user_id=emp.id) }}">Edit</a>
+            <form action="{{ url_for('manager_delete_employee', user_id=emp.id) }}" 
+                  method="POST"
+                  style="display:inline;"
+                  onsubmit="return confirm('Delete this employee?');">
+                <button type="submit">Delete</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+
+<hr>
+
+<h2>Projects</h2>
+<p><a href="{{ url_for('manager_add_project') }}">Add Project</a></p>
+<table border="1">
+    <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Description</th>
+        <th>Actions</th>
+    </tr>
+    {% for p in projects %}
+    <tr>
+        <td>{{ p.id }}</td>
+        <td>{{ p.name }}</td>
+        <td>{{ p.description }}</td>
+        <td>
+            <a href="{{ url_for('manager_edit_project', project_id=p.id) }}">Edit</a>
+            <form action="{{ url_for('manager_delete_project', project_id=p.id) }}" 
+                  method="POST"
+                  style="display:inline;"
+                  onsubmit="return confirm('Delete this project?');">
+                <button type="submit">Delete</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+
+<hr>
+
+<h2>Reports</h2>
+<h3>Hours by Project</h3>
+<ul>
+{% for proj, hours in project_summaries %}
+    <li>{{ proj.name }}: {{ hours }} total hours</li>
+{% endfor %}
+</ul>
+
+<h3>Hours by Employee</h3>
+<ul>
+{% for emp, hours in employee_summaries %}
+    <li>{{ emp.username }}: {{ hours }} total hours</li>
+{% endfor %}
+</ul>
+
+{% endblock %}

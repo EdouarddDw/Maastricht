@@ -1,33 +1,47 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Default Title{% endblock %}</title>
-    <!-- Link to the main CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-    {% block head %}{% endblock %}
+  <meta charset="UTF-8">
+  <title>{% block title %}My Final Project{% endblock %}</title>
+  <!--  link your CSS HERE!!!!!-->
 </head>
 <body>
-    <header>
-        <h1>Enterpise Dashboard</h1>
-    </header>
-    <main>
-        {% block body %}{% endblock %}
-        {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-        <ul>
-        {% for category, message in messages %}
-            <li class="{{ category }}">{{ message }}</li>
-        {% endfor %}
-        </ul>
-    {% endif %}
-{% endwith %}
+  <header>
+    <nav>
+      {% if session['user_id'] is defined %}
+          Logged in as {{ session.get('role') }}
+          – <a href="{{ url_for('logout') }}">Logout</a>
+          {% if session.get('role') == 'admin' %}
+             | <a href="{{ url_for('manager_dashboard') }}">Manager Dashboard</a>
+          {% else %}
+             | <a href="{{ url_for('employee_dashboard') }}">Employee Dashboard</a>
+          {% endif %}
+      {% else %}
+          <a href="{{ url_for('login') }}">Login</a> | 
+          <a href="{{ url_for('signup') }}">Sign Up</a>
+      {% endif %}
+    </nav>
+  </header>
 
-    </main>
-    <footer>
-        <p>&copy; 2025 Flask Website. Edouard Dewaertheijd and Aden0.</p>
-    </footer>
+  <hr>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <ul>
+        {% for category, msg in messages %}
+          <li><strong>{{ category }}</strong>: {{ msg }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% endwith %}
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer>
+    <hr>
+    <p>&copy; 2025 My Final Project</p>
+  </footer>
 </body>
 </html>

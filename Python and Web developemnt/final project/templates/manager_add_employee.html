@@ -1,0 +1,25 @@
+<!-- templates/manager_add_employee.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Add New Employee</h1>
+
+<form method="POST">
+    <label for="username">Username:</label><br>
+    <input type="text" id="username" name="username" required><br><br>
+
+    <label for="password">Password:</label><br>
+    <input type="password" id="password" name="password" required><br><br>
+
+    <label for="role">Role:</label><br>
+    <select id="role" name="role">
+        <option value="employee" selected>Employee</option>
+        <option value="admin">Admin</option>
+    </select><br><br>
+
+    <button type="submit">Add Employee</button>
+    <a href="{{ url_for('manager_dashboard') }}">
+        <button type="button">Cancel</button>
+    </a>
+</form>
+{% endblock %}

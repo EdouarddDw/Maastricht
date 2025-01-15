@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Edit Employee: {{ emp.username }}</h1>
+
+<form method="POST">
+    <!-- Username -->
+    <label for="username">Username:</label><br>
+    <input 
+        type="text" 
+        id="username" 
+        name="username"
+        value="{{ emp.username }}"
+        required
+    >
+    <br><br>
+
+    <!-- Password (optional update) -->
+    <label for="password">New Password (optional):</label><br>
+    <input 
+        type="password" 
+        id="password" 
+        name="password"
+        placeholder="Leave blank to keep current password"
+    >
+    <br><br>
+
+    <!-- Role (Employee/Admin) -->
+    <label for="role">Role:</label><br>
+    <select id="role" name="role">
+        <option 
+            value="employee" 
+            {% if emp.role == 'employee' %} selected {% endif %}
+        >
+            Employee
+        </option>
+        <option 
+            value="admin" 
+            {% if emp.role == 'admin' %} selected {% endif %}
+        >
+            Admin
+        </option>
+    </select>
+    <br><br>
+
+    <!-- Project Assignment -->
+    <label for="project_id">Assign Project:</label><br>
+    <select id="project_id" name="project_id">
+        <option value="None">-- No Project --</option>
+        {% for project in projects %}
+        <option 
+            value="{{ project.id }}"
+            {% if emp.project_id == project.id %} selected {% endif %}
+        >
+            {{ project.name }}
+        </option>
+        {% endfor %}
+    </select>
+    <br><br>
+
+    <!-- Submit and Cancel -->
+    <button type="submit">Save Changes</button>
+    <a href="{{ url_for('manager_dashboard') }}">
+        <button type="button">Cancel</button>
+    </a>
+</form>
+{% endblock %}

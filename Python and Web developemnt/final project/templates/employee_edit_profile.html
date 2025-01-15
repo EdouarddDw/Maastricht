@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Edit Your Profile</h1>
+
+<form method="POST">
+    <p>
+        <label for="first_name">First Name:</label><br>
+        <input 
+            type="text" 
+            id="first_name" 
+            name="first_name" 
+            value="{{ user.first_name | default('') }}"
+        >
+    </p>
+
+    <p>
+        <label for="last_name">Last Name:</label><br>
+        <input 
+            type="text" 
+            id="last_name" 
+            name="last_name"
+            value="{{ user.last_name | default('') }}"
+        >
+    </p>
+
+    <p>
+        <label for="phone">Phone:</label><br>
+        <input 
+            type="text" 
+            id="phone" 
+            name="phone"
+            value="{{ user.phone | default('') }}"
+        >
+    </p>
+
+    <p>
+        <label for="address">Address:</label><br>
+        <input 
+            type="text" 
+            id="address" 
+            name="address"
+            value="{{ user.address | default('') }}"
+        >
+    </p>
+
+    <p>
+        <label for="birthdate">Birthdate:</label><br>
+        <input 
+            type="date" 
+            id="birthdate" 
+            name="birthdate"
+            {% if user.birthdate %}
+              value="{{ user.birthdate }}"
+            {% endif %}
+        >
+    </p>
+
+    <button type="submit">Save Changes</button>
+    <a href="{{ url_for('employee_dashboard') }}">
+        <button type="button">Cancel</button>
+    </a>
+</form>
+{% endblock %}
