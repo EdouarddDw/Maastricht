@@ -1,7 +1,11 @@
 got a couple of ideas:
 - add an estimation of the number of hours a project will take so we can create nice graphs and shit
 - log file of modififcations and who did input
--
+-  have the admin aprove of hourse the employees submit
+- gnereal page where the admin can who clocked in and when
+- on employee dashboard allow the employee on what project he want to put the hourse in
+- allows employees to have multiple projects
+- make it a little more branded.
 
 
 to do:
