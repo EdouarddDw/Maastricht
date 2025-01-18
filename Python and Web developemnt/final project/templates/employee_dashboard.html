@@ -40,28 +40,75 @@
 
 <hr>
 
-<h3>My Recent Logs</h3>
-Total Logged Hours: {{ total_logged_hours }}
-<ul>
-{% for log in logs %}
-    <li>
-      {{ log.log_date }}: {{ log.hours }} hours
-      {% if log.project %}
-        ({{ log.project.name }})
-      {% endif %}
-    </li>
-{% endfor %}
-</ul>
+<h2>My Recent Logs</h2>
+<!-- TO add: add a section that shows the logs of the hours that are yet to be approved -->
 
-<hr>
 
-<!-- NEW SECTION: Show Hours Summaries Per Project -->
+<h3>My Approved Hours</h3>
+<table border="1">
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Project</th>
+            <th>Hours</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for log in logs if log.approved %}
+        <tr>
+            <td>{{ log.log_date }}</td>
+            <td>{{ log.project.name if log.project else 'N/A' }}</td>
+            <td>{{ log.hours }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+<p>Total Approved Hours: {{ total_approved_hours }}</p>
+
+<h3>Pending Approval</h3>
+<table border="1">
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Project</th>
+            <th>Hours</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for log in logs if not log.approved %}
+        <tr>
+            <td>{{ log.log_date }}</td>
+            <td>{{ log.project.name if log.project else 'N/A' }}</td>
+            <td>{{ log.hours }}</td>
+            <td>
+                <form action="{{ url_for('employee_delete_log', log_id=log.id) }}" method="POST">
+                    <button type="submit">Delete</button>
+                </form>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<!-- NEW SECTION: Show Hours Summaries Per Project of approved hours -->
 <h3>My Hours Per Project</h3>
-<ul>
-  {% for proj, hours in project_hours.items() %}
-    <li>{{ proj.name }}: {{ hours }} hours</li>
-  {% endfor %}
-</ul>
+<table border="1">
+    <thead>
+        <tr>
+            <th>Project</th>
+            <th>Hours</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for proj, hours in project_hours.items() %}
+        <tr>
+            <td>{{ proj.name }}</td>
+            <td>{{ hours }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
 
 <p><a href="{{ url_for('employee_edit_profile') }}">Edit My Profile</a></p>
 {% endblock %}

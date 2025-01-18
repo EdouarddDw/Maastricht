@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from flask_sqlalchemy import SQLAlchemy
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import date
+from datetime import datetime, date
 
 app = Flask(__name__)
 
@@ -70,6 +70,7 @@ class TimeLog(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     log_date = db.Column(db.Date, default=date.today)
     hours = db.Column(db.Float, default=0.0)
+    approved = db.Column(db.Boolean, default=False)	# NEW: whether the hours are approved
 
     # NEW: which project these hours are for
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)
@@ -202,29 +203,27 @@ def employee_dashboard():
     if session.get('role') == 'admin':
         return redirect(url_for('manager_dashboard'))
     
-    user = User.query.get(session['user_id'])
-    
-    # Grab all logs for this user
-    logs = TimeLog.query.filter_by(user_id=user.id).order_by(TimeLog.log_date.desc()).all()
+    user_id = session['user_id']
+    user = User.query.get(user_id)
+    logs = TimeLog.query.filter_by(user_id=user_id).order_by(TimeLog.log_date.desc()).all()
 
-    # Sum up hours across ALL logs
-    total_logged_hours = sum(log.hours for log in logs)
-
-    # ---------------- NEW: Summaries by Project ----------------
-    # For each project that the user is assigned to, let's sum their hours.
+    # Calculate approved hours per project
     project_hours = {}
-    for p in user.projects:
-        logs_for_p = TimeLog.query.filter_by(user_id=user.id, project_id=p.id).all()
-        total_p_hours = sum(log.hours for log in logs_for_p)
-        project_hours[p] = total_p_hours
+    total_approved_hours = 0
+    for log in logs:
+        if log.approved:
+            project = log.project
+            if project not in project_hours:
+                project_hours[project] = 0
+            project_hours[project] += log.hours
+            total_approved_hours += log.hours
 
-    # Pass 'project_hours' to the template so we can display hours for each project.
     return render_template(
         'employee_dashboard.html',
         user=user,
         logs=logs,
-        total_logged_hours=total_logged_hours,
-        project_hours=project_hours
+        project_hours=project_hours,
+        total_approved_hours=total_approved_hours
     )
 
 
@@ -239,6 +238,7 @@ def employee_log_hours():
     hours = request.form.get('hours', 0)
     date_str = request.form.get('date')  # e.g. "2025-01-14"
     project_id = request.form.get('project_id')  # NEW: which project?
+    approved = request.form.get('approved', False)  # NEW: whether the hours are approved
 
     # Basic date parsing
     if date_str:
@@ -258,7 +258,8 @@ def employee_log_hours():
         user_id=user_id, 
         project_id=project_id,  # store the chosen project
         log_date=log_date, 
-        hours=hours_val
+        hours=hours_val,
+        approved= False  # NEW: default to False
     )
     db.session.add(new_log)
     db.session.commit()
@@ -266,7 +267,23 @@ def employee_log_hours():
     flash("Hours logged successfully.", "success")
     return redirect(url_for('employee_dashboard'))
 
+#allow emplyees to delete their own logs only for unapproved logs
 
+@app.route('/employee/delete-log/<int:log_id>', methods=['POST'])
+@login_required
+def employee_delete_log(log_id):
+    """Delete a time log entry."""
+    log = TimeLog.query.get_or_404(log_id)
+    if log.user_id != session['user_id']:
+        flash("You can only delete your own logs.", "danger")
+        return redirect(url_for('employee_dashboard'))
+    if log.approved:
+        flash("You cannot delete approved logs.", "danger")
+        return redirect(url_for('employee_dashboard'))
+    db.session.delete(log)
+    db.session.commit()
+    flash("Log deleted.", "success")
+    return redirect(url_for('employee_dashboard'))
 
 @app.route('/employee/edit-profile', methods=['GET', 'POST'])
 @login_required
@@ -298,31 +315,34 @@ def employee_edit_profile():
 @app.route('/manager/dashboard')
 @admin_required
 def manager_dashboard():
-    """The manager's one-stop dashboard."""
     projects = Project.query.all()
     employees = User.query.filter(User.role != 'admin').all()
 
-    # Hours by project: 
-    # Instead of .any(), rely on TimeLog.project_id == p.id
     project_summaries = []
     for p in projects:
-        # Only logs referencing this project_id
-        logs_for_p = TimeLog.query.filter_by(project_id=p.id).all()
-        total_p_hours = sum(log.hours for log in logs_for_p)
-        project_summaries.append((p, total_p_hours))
+        approved_hours = db.session.query(db.func.sum(TimeLog.hours))\
+            .filter(TimeLog.project_id == p.id, TimeLog.approved == True)\
+            .scalar() or 0.0
+        project_summaries.append((p, approved_hours))
 
-    # Hours by employee:
     employee_summaries = []
     for emp in employees:
-        logs_for_emp = TimeLog.query.filter_by(user_id=emp.id).all()
-        total_e_hours = sum(log.hours for log in logs_for_emp)
-        employee_summaries.append((emp, total_e_hours))
+        approved_hours = db.session.query(db.func.sum(TimeLog.hours))\
+            .filter(TimeLog.user_id == emp.id, TimeLog.approved == True)\
+            .scalar() or 0.0
+        employee_summaries.append((emp, approved_hours))
 
-    return render_template('manager_dashboard.html',
-                           projects=projects,
-                           employees=employees,
-                           project_summaries=project_summaries,
-                           employee_summaries=employee_summaries)
+    # NEW: get pending logs
+    pending_logs = TimeLog.query.filter_by(approved=False).all()
+
+    return render_template(
+        'manager_dashboard.html',
+        projects=projects,
+        employees=employees,
+        project_summaries=project_summaries,
+        employee_summaries=employee_summaries,
+        pending_logs=pending_logs
+    )
 
 
 @app.route('/manager/add-employee', methods=['GET','POST'])
@@ -463,6 +483,57 @@ def manager_assign_projects(user_id):
 
     db.session.commit()
     flash("Projects assigned!", "success")
+    return redirect(url_for('manager_dashboard'))
+
+@admin_required
+@app.route('/manager/approve-hours/<int:hour_id>', methods=['POST'])
+def manger_approve_hours(hour_id):
+    """Approve hours for a specific TimeLog entry."""
+    log = TimeLog.query.get_or_404(hour_id)
+    log.approved = True
+    db.session.commit()
+    flash("Hours approved!", "success")
+    return redirect(url_for('manager_dashboard'))
+
+
+# manager add hours new route
+@app.route('/manager/add-hour', methods=['GET', 'POST'])
+@admin_required
+def manager_add_hour():
+    employees = User.query.filter(User.role != 'admin').all()
+    projects = Project.query.all()
+
+    if request.method == 'POST':
+        user_id = request.form['user_id']
+        project_id = request.form['project_id']
+        log_date_str = request.form['date']
+        hours = request.form['hours']
+
+        # Convert the string (e.g. "2025-01-14") into a date object
+        log_date_obj = datetime.strptime(log_date_str, '%Y-%m-%d').date()
+
+        time_log = TimeLog(
+            user_id=user_id,
+            project_id=project_id,
+            log_date=log_date_obj,
+            hours=hours,
+            approved=True
+        )
+        db.session.add(time_log)
+        db.session.commit()
+        flash("Hours added!", "success")
+        return redirect(url_for('manager_dashboard'))
+
+    return render_template('manager_add_hour.html', employees=employees, projects=projects)
+
+
+@app.route('/manager/delete-hour/<int:hour_id>', methods=['POST'])
+@admin_required
+def manager_delete_hour(hour_id):
+    hour_log = TimeLog.query.get_or_404(hour_id)
+    db.session.delete(hour_log)
+    db.session.commit()
+    flash("Hour entry deleted.", "success")
     return redirect(url_for('manager_dashboard'))
 
 

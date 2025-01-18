@@ -89,11 +89,10 @@
         <td>{{ p.name }}</td>
         <td>{{ p.description }}</td>
         <td>
-            <a href="{{ url_for('manager_edit_project', project_id=p.id) }}">Edit</a>
-            <form action="{{ url_for('manager_delete_project', project_id=p.id) }}" 
-                  method="POST"
-                  style="display:inline;"
-                  onsubmit="return confirm('Delete this project?');">
+            <form action="{{ url_for('manager_edit_project', project_id=p.id) }}" method="GET" style="display:inline;">
+                <button type="submit">Edit</button>
+            </form>
+            <form action="{{ url_for('manager_delete_project', project_id=p.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete this project?');">
                 <button type="submit">Delete</button>
             </form>
         </td>
@@ -103,12 +102,45 @@
 
 <hr>
 
-<!-- 
-    Reports Section
-    The logic in app.py ensures that only logs for each project (p) are counted 
-    by using User.projects.any(id=p.id). 
-    So "Hours by Project" shows only the hours relevant to that specific project.
--->
+<h2>Aprove Employee hours</h2>
+
+<p><a href="{{ url_for('manager_add_hour') }}">Add Hour</a></p>
+
+<table border="1">
+  <thead>
+    <tr>
+      <th>Employee</th>
+      <th>Project</th>
+      <th>Hours</th>
+      <th>Date</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for log in pending_logs %}
+    <tr>
+      <td>{{ log.user.username }}</td>
+      <td>{{ log.project.name if log.project else "N/A" }}</td>
+      <td>{{ log.hours }}</td>
+      <td>{{ log.log_date }}</td>
+      <td>
+        <form action="{{ url_for('manger_approve_hours', hour_id=log.id) }}"
+              method="POST"
+              style="display:inline;">
+          <button type="submit">Approve</button>
+        </form>
+        <form action="{{ url_for('manager_delete_hour', hour_id=log.id) }}"
+              method="POST"
+              style="display:inline; margin-left: 5px;">
+          <button type="submit">Delete</button>
+        </form>
+      </td>
+      
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
 <h2>Reports</h2>
 
 <h3>Hours by Project</h3>
