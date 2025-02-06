@@ -72,7 +72,7 @@ class TimeLog(db.Model):
     hours = db.Column(db.Float, default=0.0)
     approved = db.Column(db.Boolean, default=False)	# NEW: whether the hours are approved
 
-    # NEW: which project these hours are for
+    # which project these hours are for
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)
     project = db.relationship('Project')
 

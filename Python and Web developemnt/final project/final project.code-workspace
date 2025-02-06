@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "final project",
+			"path": "."
+		},
+		{
+			"name": "env",
+			"path": "../../../../../env"
+		}
+	],
+	"settings": {}
+}
